@@ -25,14 +25,13 @@ async function initializeDatabase() {
         await new Promise((resolve, reject) => {
             db.serialize(() => {
                 db.run(`CREATE TABLE IF NOT EXISTS candles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     code TEXT,
                     timestamp INTEGER,
                     open REAL,
                     high REAL,
                     low REAL,
                     close REAL,
-                    UNIQUE(code, timestamp)
+                    CONSTRAINT Candle_PK PRIMARY KEY (code, timestamp)
                 )`, (err) => {
                     if (err) reject(err);
                     else resolve();
@@ -109,12 +108,14 @@ ws.addEventListener('message', (event) => {
             });
 
             // OHLC 데이터를 SQLite에 저장
-            db.run(`INSERT INTO candles (code, timestamp, open, high, low, close)
+            db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
                     VALUES (?, ?, ?, ?, ?, ?)`,
                 [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
                 (err) => {
                     if (err) {
                         console.error('데이터베이스 저장 오류:', err);
+                    } else {
+                        console.log(`캔들 데이터 저장됨: ${candle.code}`);
                     }
                 });
 
