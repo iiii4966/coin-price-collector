@@ -4,15 +4,20 @@ const sqlite3 = require('sqlite3').verbose();
 // SQLite 데이터베이스 연결
 const db = new sqlite3.Database('candles.db');
 
-// candles 테이블 생성
-db.run(`CREATE TABLE IF NOT EXISTS candles (
-    code TEXT,
-    timestamp INTEGER,
-    open REAL,
-    high REAL,
-    low REAL,
-    close REAL
-)`);
+// candles 테이블 생성 및 unique index 추가
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS candles (
+        code TEXT,
+        timestamp INTEGER,
+        open REAL,
+        high REAL,
+        low REAL,
+        close REAL
+    )`);
+
+    // unique index 추가
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_code_timestamp ON candles(code, timestamp)`);
+});
 const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
 const candles = {};
