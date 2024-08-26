@@ -43,9 +43,16 @@ ws.addEventListener('message', (event) => {
         candle.high = Math.max(candle.high, trade_price);
         candle.low = Math.min(candle.low, trade_price);
 
-        // 캔들 기간 경과 시 출력하고 새로운 캔들로 초기화
-        if (trade_timestamp >= candle.timestamp + candleDuration * 60000) {
-            console.log('캔들:', candle);
+        // 1분 캔들 기간 경과 시 OHLC 데이터 출력하고 새로운 캔들로 초기화
+        if (candleDuration === 1 && trade_timestamp >= candle.timestamp + 60000) {
+            console.log('1분 캔들 OHLC:', {
+                code: candle.code,
+                timestamp: candle.timestamp,
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close,
+            });
 
             candles[candleKey] = {
                 code,
