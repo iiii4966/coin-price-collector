@@ -99,7 +99,7 @@ ws.addEventListener('close', () => {
 setInterval(() => {
     for (const candleKey in candles) {
         const candle = candles[candleKey];
-        db.run(`INSERT INTO candles (code, timestamp, open, high, low, close)
+        db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
                 VALUES (?, ?, ?, ?, ?, ?)`,
             [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
             (err) => {
