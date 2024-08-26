@@ -61,6 +61,10 @@ const request = [
     {type: 'trade', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']},
 ];
 
+function getCurrentTimestamp() {
+    return Math.floor(Date.now() / 1000);
+}
+
 ws.addEventListener('open', () => {
     console.log('업비트 WebSocket에 연결되었습니다.');
     ws.send(JSON.stringify(request));
@@ -85,6 +89,7 @@ ws.addEventListener('message', (event) => {
                 low: trade_price,
                 close: trade_price,
                 timestamp: trade_timestamp,
+                lastUpdated: getCurrentTimestamp(),
             };
         }
 
@@ -93,6 +98,7 @@ ws.addEventListener('message', (event) => {
         candle.close = trade_price;
         candle.high = Math.max(candle.high, trade_price);
         candle.low = Math.min(candle.low, trade_price);
+        candle.lastUpdated = getCurrentTimestamp();
 
         // 1분 캔들 기간 경과 시 OHLC 데이터 출력하고 새로운 캔들로 초기화
         if (candleDuration === 1 && trade_timestamp >= candle.timestamp + 60000) {
@@ -133,17 +139,22 @@ ws.addEventListener('close', () => {
     db.close(); // 데이터베이스 연결 종료
 });
 
-// 5초마다 OHLC 데이터를 SQLite에 저장
+// 5초마다 변경된 OHLC 데이터만 SQLite에 저장
 setInterval(() => {
+    const currentTime = getCurrentTimestamp();
     for (const candleKey in candles) {
         const candle = candles[candleKey];
-        db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
-                VALUES (?, ?, ?, ?, ?, ?)`,
-            [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
-            (err) => {
-                if (err) {
-                    console.error('데이터베이스 저장 오류:', err);
-                }
-            });
+        if (candle.lastUpdated > currentTime - 5) {  // 최근 5초 이내에 업데이트된 캔들만 저장
+            db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
+                    VALUES (?, ?, ?, ?, ?, ?)`,
+                [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
+                (err) => {
+                    if (err) {
+                        console.error('데이터베이스 저장 오류:', err);
+                    } else {
+                        console.log(`캔들 데이터 저장됨: ${candle.code}`);
+                    }
+                });
+        }
     }
 }, 5000);
