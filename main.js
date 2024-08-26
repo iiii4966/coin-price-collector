@@ -145,14 +145,26 @@ setInterval(() => {
     for (const candleKey in candles) {
         const candle = candles[candleKey];
         if (candle.lastUpdated > currentTime - 5) {  // 최근 5초 이내에 업데이트된 캔들만 저장
-            db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
+            db.run(`INSERT OR IGNORE INTO candles (code, timestamp, open, high, low, close)
                     VALUES (?, ?, ?, ?, ?, ?)`,
                 [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
-                (err) => {
+                function(err) {
                     if (err) {
-                        console.error('데이터베이스 저장 오류:', err);
+                        console.error('데이터베이스 삽입 오류:', err);
+                    } else if (this.changes === 0) {
+                        // 삽입이 실패했다면 (이미 존재하는 경우) UPDATE 수행
+                        db.run(`UPDATE candles SET open = ?, high = ?, low = ?, close = ?
+                                WHERE code = ? AND timestamp = ?`,
+                            [candle.open, candle.high, candle.low, candle.close, candle.code, candle.timestamp],
+                            (updateErr) => {
+                                if (updateErr) {
+                                    console.error('데이터베이스 업데이트 오류:', updateErr);
+                                } else {
+                                    console.log(`캔들 데이터 업데이트됨: ${candle.code}`);
+                                }
+                            });
                     } else {
-                        console.log(`캔들 데이터 저장됨: ${candle.code}`);
+                        console.log(`새 캔들 데이터 삽입됨: ${candle.code}`);
                     }
                 });
         }
