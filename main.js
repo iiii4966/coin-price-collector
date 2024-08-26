@@ -1,3 +1,4 @@
+const WebSocket = require('ws');
 const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
 const request = [
