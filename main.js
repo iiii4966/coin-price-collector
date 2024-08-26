@@ -18,25 +18,22 @@ function connectToDatabase() {
     });
 }
 
-// candles 테이블 생성 및 unique index 추가
+// candles 테이블 생성 및 PRIMARY KEY, UNIQUE 제약 조건 추가
 async function initializeDatabase() {
     try {
         await connectToDatabase();
         await new Promise((resolve, reject) => {
             db.serialize(() => {
                 db.run(`CREATE TABLE IF NOT EXISTS candles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     code TEXT,
                     timestamp INTEGER,
                     open REAL,
                     high REAL,
                     low REAL,
-                    close REAL
+                    close REAL,
+                    UNIQUE(code, timestamp)
                 )`, (err) => {
-                    if (err) reject(err);
-                });
-
-                // unique index 추가
-                db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_code_timestamp ON candles(code, timestamp)`, (err) => {
                     if (err) reject(err);
                     else resolve();
                 });
