@@ -2,22 +2,55 @@ const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 
 // SQLite 데이터베이스 연결
-const db = new sqlite3.Database('candles.db');
+let db;
+
+function connectToDatabase() {
+    return new Promise((resolve, reject) => {
+        db = new sqlite3.Database('candles.db', (err) => {
+            if (err) {
+                console.error('데이터베이스 연결 오류:', err.message);
+                reject(err);
+            } else {
+                console.log('데이터베이스에 연결되었습니다.');
+                resolve(db);
+            }
+        });
+    });
+}
 
 // candles 테이블 생성 및 unique index 추가
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS candles (
-        code TEXT,
-        timestamp INTEGER,
-        open REAL,
-        high REAL,
-        low REAL,
-        close REAL
-    )`);
+async function initializeDatabase() {
+    try {
+        await connectToDatabase();
+        await new Promise((resolve, reject) => {
+            db.serialize(() => {
+                db.run(`CREATE TABLE IF NOT EXISTS candles (
+                    code TEXT,
+                    timestamp INTEGER,
+                    open REAL,
+                    high REAL,
+                    low REAL,
+                    close REAL
+                )`, (err) => {
+                    if (err) reject(err);
+                });
 
-    // unique index 추가
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_code_timestamp ON candles(code, timestamp)`);
-});
+                // unique index 추가
+                db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_code_timestamp ON candles(code, timestamp)`, (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        });
+        console.log('데이터베이스 초기화 완료');
+    } catch (error) {
+        console.error('데이터베이스 초기화 오류:', error);
+        process.exit(1);
+    }
+}
+
+// 데이터베이스 초기화 실행
+initializeDatabase();
 const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
 const candles = {};
