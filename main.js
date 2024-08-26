@@ -16,7 +16,6 @@ ws.addEventListener('open', () => {
 
 ws.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
-    console.log('업비트로부터 받은 데이터:', data);
 
     if (data.type === 'trade') {
         const {code, trade_timestamp, trade_price} = data;
