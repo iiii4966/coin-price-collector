@@ -1,4 +1,18 @@
 const WebSocket = require('ws');
+const sqlite3 = require('sqlite3').verbose();
+
+// SQLite 데이터베이스 연결
+const db = new sqlite3.Database('candles.db');
+
+// candles 테이블 생성
+db.run(`CREATE TABLE IF NOT EXISTS candles (
+    code TEXT,
+    timestamp INTEGER,
+    open REAL,
+    high REAL,
+    low REAL,
+    close REAL
+)`);
 const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
 const candles = {};
@@ -53,6 +67,16 @@ ws.addEventListener('message', (event) => {
                 close: candle.close,
             });
 
+            // OHLC 데이터를 SQLite에 저장
+            db.run(`INSERT INTO candles (code, timestamp, open, high, low, close)
+                    VALUES (?, ?, ?, ?, ?, ?)`,
+                [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
+                (err) => {
+                    if (err) {
+                        console.error('데이터베이스 저장 오류:', err);
+                    }
+                });
+
             candles[candleKey] = {
                 code,
                 duration: candleDuration,
@@ -68,4 +92,20 @@ ws.addEventListener('message', (event) => {
 
 ws.addEventListener('close', () => {
     console.log('업비트 WebSocket 연결이 닫혔습니다.');
+    db.close(); // 데이터베이스 연결 종료
 });
+
+// 5초마다 OHLC 데이터를 SQLite에 저장
+setInterval(() => {
+    for (const candleKey in candles) {
+        const candle = candles[candleKey];
+        db.run(`INSERT INTO candles (code, timestamp, open, high, low, close)
+                VALUES (?, ?, ?, ?, ?, ?)`,
+            [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
+            (err) => {
+                if (err) {
+                    console.error('데이터베이스 저장 오류:', err);
+                }
+            });
+    }
+}, 5000);
