@@ -1,6 +1,9 @@
 const WebSocket = require('ws');
 const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
+const candles = {};
+const candleDuration = 1; // 캔들 기간 (분)
+
 const request = [
     {ticket: 'test'},
     {type: 'trade', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']},
@@ -14,6 +17,47 @@ ws.addEventListener('open', () => {
 ws.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
     console.log('업비트로부터 받은 데이터:', data);
+
+    if (data.type === 'trade') {
+        const {code, trade_timestamp, trade_price} = data;
+        
+        // 캔들 키 생성 (코인-기간)
+        const candleKey = `${code}-${candleDuration}`;
+
+        // 캔들 초기화
+        if (!candles[candleKey]) {
+            candles[candleKey] = {
+                code,
+                duration: candleDuration,
+                open: trade_price,
+                high: trade_price,
+                low: trade_price,
+                close: trade_price,
+                timestamp: trade_timestamp,
+            };
+        }
+
+        // 캔들 업데이트
+        const candle = candles[candleKey];
+        candle.close = trade_price;
+        candle.high = Math.max(candle.high, trade_price);
+        candle.low = Math.min(candle.low, trade_price);
+
+        // 캔들 기간 경과 시 출력하고 새로운 캔들로 초기화
+        if (trade_timestamp >= candle.timestamp + candleDuration * 60000) {
+            console.log('캔들:', candle);
+
+            candles[candleKey] = {
+                code,
+                duration: candleDuration,
+                open: trade_price,
+                high: trade_price,
+                low: trade_price,
+                close: trade_price,
+                timestamp: trade_timestamp,
+            };
+        }
+    }
 });
 
 ws.addEventListener('close', () => {
