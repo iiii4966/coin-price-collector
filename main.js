@@ -3,7 +3,7 @@ const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
 const request = [
     {ticket: 'test'},
-    {type: 'ticker', codes: ['KRW-BTC']},
+    {type: 'ticker', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']},
 ];
 
 ws.addEventListener('open', () => {
