@@ -80,101 +80,105 @@ async function initializeWebSocket() {
         {type: 'trade', codes: marketCodes},
     ];
 
-    ws.addEventListener('open', () => {
-        console.log('업비트 WebSocket에 연결되었습니다.');
-        ws.send(JSON.stringify(request));
-    });
+    function connect() {
+        ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+
+        ws.addEventListener('open', () => {
+            console.log('업비트 WebSocket에 연결되었습니다.');
+            ws.send(JSON.stringify(request));
+        });
+
+        ws.addEventListener('close', () => {
+            console.log('업비트 WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
+            setTimeout(connect, 5000);
+        });
+
+        ws.addEventListener('error', (error) => {
+            console.error('WebSocket 오류:', error);
+        });
+
+        setupMessageHandler();
+    }
+
+    connect();
 }
 
 initializeWebSocket();
 
-ws.addEventListener('message', (event) => {
-    const data = JSON.parse(event.data);
+function setupMessageHandler() {
 
-    if (data.type === 'trade') {
-        const {code, trade_timestamp, trade_price} = data;
-        
-        // 캔들 키 생성 (코인-기간)
-        const candleKey = `${code}-${candleDuration}`;
+    ws.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
 
-        // 캔들 초기화
-        if (!candles[candleKey]) {
-            candles[candleKey] = {
-                code,
-                duration: candleDuration,
-                open: trade_price,
-                high: trade_price,
-                low: trade_price,
-                close: trade_price,
-                timestamp: trade_timestamp,
-                lastUpdated: getCurrentTimestamp(),
-            };
+        if (data.type === 'trade') {
+            const {code, trade_timestamp, trade_price} = data;
+            
+            // 캔들 키 생성 (코인-기간)
+            const candleKey = `${code}-${candleDuration}`;
+
+            // 현재 시간을 기준으로 캔들의 시작 시간 계산
+            const currentCandleStartTime = Math.floor(trade_timestamp / (candleDuration * 60000)) * (candleDuration * 60000);
+
+            // 캔들 초기화 또는 새 캔들 시작
+            if (!candles[candleKey] || currentCandleStartTime > candles[candleKey].timestamp) {
+                candles[candleKey] = {
+                    code,
+                    duration: candleDuration,
+                    open: trade_price,
+                    high: trade_price,
+                    low: trade_price,
+                    close: trade_price,
+                    timestamp: currentCandleStartTime,
+                    lastUpdated: getCurrentTimestamp(),
+                };
+            } else {
+                // 캔들 업데이트
+                const candle = candles[candleKey];
+                candle.close = trade_price;
+                candle.high = Math.max(candle.high, trade_price);
+                candle.low = Math.min(candle.low, trade_price);
+                candle.lastUpdated = getCurrentTimestamp();
+            }
         }
+    });
+}
 
-        // 캔들 업데이트
-        const candle = candles[candleKey];
-        candle.close = trade_price;
-        candle.high = Math.max(candle.high, trade_price);
-        candle.low = Math.min(candle.low, trade_price);
-        candle.lastUpdated = getCurrentTimestamp();
-
-        // 1분 캔들 기간 경과 시 OHLC 데이터 출력하고 새로운 캔들로 초기화
-        if (candleDuration === 1 && trade_timestamp >= candle.timestamp + 60000) {
-            console.log('1분 캔들 OHLC:', {
-                code: candle.code,
-                timestamp: candle.timestamp,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close,
-            });
-
-            // OHLC 데이터를 SQLite에 저장
-            db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
-                    VALUES (?, ?, ?, ?, ?, ?)`,
-                [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
-                (err) => {
-                    if (err) {
-                        console.error('데이터베이스 저장 오류:', err);
-                    } else {
-                        console.log(`캔들 데이터 저장됨: ${candle.code}`);
-                    }
-                });
-
-            candles[candleKey] = {
-                code,
-                duration: candleDuration,
-                open: trade_price,
-                high: trade_price,
-                low: trade_price,
-                close: trade_price,
-                timestamp: trade_timestamp,
-            };
-        }
-    }
-});
-
-ws.addEventListener('close', () => {
-    console.log('업비트 WebSocket 연결이 닫혔습니다.');
-    db.close(); // 데이터베이스 연결 종료
-});
-
-// 5초마다 변경된 OHLC 데이터만 SQLite에 저장
+// 5초마다 모든 OHLC 데이터를 SQLite에 저장
 setInterval(() => {
     const currentTime = getCurrentTimestamp();
+    const promises = [];
+
     for (const candleKey in candles) {
         const candle = candles[candleKey];
-        if (candle.lastUpdated > currentTime - 5) {  // 최근 5초 이내에 업데이트된 캔들만 저장
+        promises.push(new Promise((resolve, reject) => {
             db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
                     VALUES (?, ?, ?, ?, ?, ?)`,
                 [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
                 function(err) {
                     if (err) {
                         console.error('데이터베이스 저장 오류:', err);
+                        reject(err);
                     } else {
-                        console.log(`캔들 데이터 저장됨: ${candle.code}`);
+                        resolve();
                     }
                 });
-        }
+        }));
     }
+
+    Promise.all(promises)
+        .then(() => console.log(`${Object.keys(candles).length}개의 캔들 데이터가 저장되었습니다.`))
+        .catch(error => console.error('데이터 저장 중 오류 발생:', error));
 }, 5000);
+
+// 프로그램 종료 시 데이터베이스 연결 종료
+process.on('SIGINT', () => {
+    console.log('프로그램을 종료합니다...');
+    db.close((err) => {
+        if (err) {
+            console.error('데이터베이스 연결 종료 중 오류 발생:', err);
+        } else {
+            console.log('데이터베이스 연결이 안전하게 종료되었습니다.');
+        }
+        process.exit();
+    });
+});
