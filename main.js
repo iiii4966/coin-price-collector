@@ -55,10 +55,9 @@ initializeDatabase().then(() => {
 let ws;
 let request;
 const candles = {};
-candleDurations.forEach(duration => {
-    candles[duration] = {};
-});
+
 const candleDurations = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080]; // 캔들 기간 (분)
+candleDurations.forEach(duration => candles[duration] = {});
 
 let marketCodes = [];
 
