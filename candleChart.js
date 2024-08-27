@@ -39,14 +39,15 @@ function createChart(data) {
                         time: {
                             unit: 'minute',
                             displayFormats: {
-                                minute: 'HH:mm'
+                                minute: 'MM-DD HH:mm'
                             }
                         },
                         ticks: {
                             maxRotation: 0,
                             autoSkip: true,
-                            maxTicksLimit: 10
-                        }
+                            maxTicksLimit: 8
+                        },
+                        distribution: 'linear'
                     },
                     y: {
                         position: 'right',
@@ -83,11 +84,20 @@ function createChart(data) {
                     candlestick: {
                         width: function(ctx) {
                             const visiblePoints = ctx.chart.scales.x.max - ctx.chart.scales.x.min;
-                            const availableWidth = ctx.chart.width - ctx.chart.chartArea.left - 30; // 오른쪽 여백 고려
-                            const barWidth = Math.max(1, Math.floor(availableWidth / visiblePoints));
-                            return Math.min(barWidth, 10);  // 최대 너비를 10픽셀로 제한
+                            const availableWidth = ctx.chart.width - ctx.chart.chartArea.left - 30;
+                            let barWidth = Math.max(1, Math.floor(availableWidth / visiblePoints));
+                            barWidth = Math.min(barWidth, 15);  // 최대 너비를 15픽셀로 제한
+                            return Math.max(barWidth, 2);  // 최소 너비를 2픽셀로 설정
                         }
                     }
+                },
+                animation: {
+                    duration: 0  // 애니메이션 비활성화로 성능 향상
+                },
+                hover: {
+                    animationDuration: 0  // 호버 애니메이션 비활성화
+                },
+                responsiveAnimationDuration: 0  // 반응형 애니메이션 비활성화
                 }
             }
         });
