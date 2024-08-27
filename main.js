@@ -3,7 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 
 const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 const MARKET_CODE = 'KRW-BTC';
-const CANDLE_INTERVALS = [1, 3, 5, 10, 15, 30, 60]; // 분 단위
+const CANDLE_INTERVALS = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080]; // 1분, 3분, 5분, 10분, 15분, 30분, 1시간, 4시간, 1일, 1주
 
 let ws;
 let currentCandles = {};
@@ -53,6 +53,27 @@ function getCurrentTimestamp() {
     return Math.floor(Date.now() / 1000);
 }
 
+function getCandleStartTime(currentTime, interval) {
+    if (interval <= 60) {
+        // 1시간 이하의 간격은 분 단위로 계산
+        return Math.floor(currentTime / (interval * 60)) * (interval * 60);
+    } else if (interval === 240) {
+        // 4시간 간격
+        return Math.floor(currentTime / (4 * 60 * 60)) * (4 * 60 * 60);
+    } else if (interval === 1440) {
+        // 1일 간격
+        const date = new Date(currentTime * 1000);
+        date.setUTCHours(0, 0, 0, 0);
+        return Math.floor(date.getTime() / 1000);
+    } else if (interval === 10080) {
+        // 1주 간격
+        const date = new Date(currentTime * 1000);
+        date.setUTCHours(0, 0, 0, 0);
+        date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+        return Math.floor(date.getTime() / 1000);
+    }
+}
+
 function initializeWebSocket() {
     ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
@@ -84,7 +105,7 @@ function updateCandles(trade) {
     const currentTime = getCurrentTimestamp();
     
     CANDLE_INTERVALS.forEach(interval => {
-        const candleStartTime = Math.floor(currentTime / (interval * 60)) * (interval * 60);
+        const candleStartTime = getCandleStartTime(currentTime, interval);
         
         if (!currentCandles[interval] || currentCandles[interval].timestamp !== candleStartTime) {
             if (currentCandles[interval]) {
@@ -107,15 +128,28 @@ function updateCandles(trade) {
 }
 
 function saveCandle(candle, interval) {
-    const sql = `INSERT OR REPLACE INTO candles_${interval}m (code, timestamp, open, high, low, close) 
+    let intervalSuffix;
+    if (interval < 60) {
+        intervalSuffix = `${interval}m`;
+    } else if (interval === 60) {
+        intervalSuffix = '1h';
+    } else if (interval === 240) {
+        intervalSuffix = '4h';
+    } else if (interval === 1440) {
+        intervalSuffix = '1d';
+    } else if (interval === 10080) {
+        intervalSuffix = '1w';
+    }
+
+    const sql = `INSERT OR REPLACE INTO candles_${intervalSuffix} (code, timestamp, open, high, low, close) 
                  VALUES (?, ?, ?, ?, ?, ?)`;
     const values = [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close];
 
     db.run(sql, values, (err) => {
         if (err) {
-            console.error(`캔들 저장 오류 (${interval}m):`, err.message);
+            console.error(`캔들 저장 오류 (${intervalSuffix}):`, err.message);
         } else {
-            console.log(`캔들 저장 완료 (${interval}m): ${candle.code} - ${new Date(candle.timestamp * 1000)}`);
+            console.log(`캔들 저장 완료 (${intervalSuffix}): ${candle.code} - ${new Date(candle.timestamp * 1000)}`);
         }
     });
 }
