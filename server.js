@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const port = 3003;
 
-app.use(express.static('public'));
+app.use(express.static('.'));
 
 const db = new sqlite3.Database('candles.db', (err) => {
     if (err) {
@@ -29,7 +29,7 @@ app.get('/api/candles/:interval', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(port, () => {
