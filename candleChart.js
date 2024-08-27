@@ -29,13 +29,35 @@ function createChart(data) {
                     x: {
                         type: 'time',
                         time: {
-                            unit: 'minute'
+                            unit: 'minute',
+                            displayFormats: {
+                                minute: 'HH:mm'
+                            }
+                        },
+                        ticks: {
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
                         }
                     },
                     y: {
                         title: {
                             display: true,
                             text: '가격 (KRW)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                elements: {
+                    candlestick: {
+                        width: function(ctx) {
+                            const visiblePoints = ctx.chart.scales.x.max - ctx.chart.scales.x.min;
+                            const barWidth = Math.max(1, Math.round(ctx.chart.width / visiblePoints));
+                            return Math.min(barWidth, 15);  // 최대 너비를 15픽셀로 제한
                         }
                     }
                 }
