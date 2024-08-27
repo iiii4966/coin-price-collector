@@ -1,58 +1,19 @@
 const WebSocket = require('ws');
-const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
+const { Worker } = require('worker_threads');
 
-// SQLite 데이터베이스 연결
-let db;
+const dbWorker = new Worker('./dbWorker.js');
 
-function connectToDatabase() {
-    return new Promise((resolve, reject) => {
-        db = new sqlite3.Database('candles.db', (err) => {
-            if (err) {
-                console.error('데이터베이스 연결 오류:', err.message);
-                reject(err);
-            } else {
-                console.log('데이터베이스에 연결되었습니다.');
-                resolve(db);
-            }
-        });
-    });
-}
-
-// 각 duration에 대한 테이블 생성
-async function initializeDatabase() {
-    try {
-        await connectToDatabase();
-        const createTablePromises = candleDurations.map(duration => {
-            return new Promise((resolve, reject) => {
-                const tableName = `candles_${duration}`;
-                db.run(`CREATE TABLE IF NOT EXISTS ${tableName} (
-                    code TEXT,
-                    timestamp INTEGER,
-                    open REAL,
-                    high REAL,
-                    low REAL,
-                    close REAL,
-                    CONSTRAINT ${tableName}_PK PRIMARY KEY (code, timestamp)
-                )`, (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-        });
-
-        await Promise.all(createTablePromises);
-        console.log('데이터베이스 초기화 완료');
-    } catch (error) {
-        console.error('데이터베이스 초기화 오류:', error);
-        process.exit(1);
+dbWorker.on('message', (message) => {
+    if (message.success) {
+        console.log(`메인: Worker가 ${message.totalInserted}개의 캔들 데이터를 저장했습니다.`);
+    } else {
+        console.error('메인: Worker에서 오류 발생:', message.error);
     }
-}
-
-// 데이터베이스 초기화 실행 후 WebSocket 초기화
-initializeDatabase().then(() => {
-    initializeWebSocket();
 });
+
+// WebSocket 초기화
+initializeWebSocket();
 
 let ws;
 let request;
@@ -145,50 +106,17 @@ function updateCandle(code, trade_timestamp, trade_price, duration) {
 }
 }
 
-// Bulk insert 함수
-function bulkInsertCandles(duration, candlesToInsert) {
-    return new Promise((resolve, reject) => {
-        const tableName = `candles_${duration}`;
-        const placeholders = candlesToInsert.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
-        const sql = `INSERT OR REPLACE INTO ${tableName} (code, timestamp, open, high, low, close) VALUES ${placeholders}`;
-        const values = candlesToInsert.flatMap(candle => [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close]);
-
-        db.run(sql, values, function(err) {
-            if (err) {
-                console.error(`Bulk insert 오류 (${tableName}):`, err);
-                reject(err);
-            } else {
-                resolve(this.changes);
-            }
-        });
-    });
-}
-
-// 5초마다 모든 OHLC 데이터를 SQLite에 저장
-setInterval(async () => {
+// 5초마다 모든 OHLC 데이터를 Worker에 전송
+setInterval(() => {
     const currentTime = getCurrentTimestamp();
-    const insertPromises = [];
-
-    db.run('BEGIN TRANSACTION');
+    const candlesToInsert = {};
 
     for (const duration of candleDurations) {
-        const candlesToInsert = Object.values(candles[duration])
+        candlesToInsert[duration] = Object.values(candles[duration])
             .filter(candle => candle.lastUpdated < currentTime - 5);
-
-        if (candlesToInsert.length > 0) {
-            insertPromises.push(bulkInsertCandles(duration, candlesToInsert));
-        }
     }
 
-    try {
-        const results = await Promise.all(insertPromises);
-        const totalInserted = results.reduce((sum, count) => sum + count, 0);
-        db.run('COMMIT');
-        console.log(`${totalInserted}개의 캔들 데이터가 저장되었습니다.`);
-    } catch (error) {
-        db.run('ROLLBACK');
-        console.error('데이터 저장 중 오류 발생:', error);
-    }
+    dbWorker.postMessage(candlesToInsert);
 
     // 오래된 캔들 데이터 정리
     cleanOldCandles();
@@ -206,15 +134,11 @@ function cleanOldCandles() {
     });
 }
 
-// 프로그램 종료 시 데이터베이스 연결 종료
+// 프로그램 종료 시 Worker 종료
 process.on('SIGINT', () => {
-    console.log('프로그램을 종료합니다...');
-    db.close((err) => {
-        if (err) {
-            console.error('데이터베이스 연결 종료 중 오류 발생:', err);
-        } else {
-            console.log('데이터베이스 연결이 안전하게 종료되었습니다.');
-        }
+    console.log('메인: 프로그램을 종료합니다...');
+    dbWorker.terminate().then(() => {
+        console.log('메인: Worker가 안전하게 종료되었습니다.');
         process.exit();
     });
 });
