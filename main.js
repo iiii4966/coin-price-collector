@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 
-const UPDATE_INTERVAL = 60000; // 1분마다 업데이트
+const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 const MARKET_CODE = 'KRW-BTC';
 
 let ws;
