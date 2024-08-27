@@ -3,7 +3,18 @@ const sqlite3 = require('sqlite3').verbose();
 
 const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 const MARKET_CODE = 'KRW-BTC';
-const CANDLE_INTERVALS = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080]; // 1분, 3분, 5분, 10분, 15분, 30분, 1시간, 4시간, 1일, 1주
+const CANDLE_INTERVALS = [
+    { interval: 1, name: '1m' },
+    { interval: 3, name: '3m' },
+    { interval: 5, name: '5m' },
+    { interval: 10, name: '10m' },
+    { interval: 15, name: '15m' },
+    { interval: 30, name: '30m' },
+    { interval: 60, name: '1h' },
+    { interval: 240, name: '4h' },
+    { interval: 1440, name: '1d' },
+    { interval: 10080, name: '1w' }
+];
 
 let ws;
 let currentCandles = {};
@@ -24,9 +35,9 @@ function connectToDatabase() {
 }
 
 async function createTables() {
-    const promises = CANDLE_INTERVALS.map(interval => {
+    const promises = CANDLE_INTERVALS.map(({ name }) => {
         return new Promise((resolve, reject) => {
-            const sql = `CREATE TABLE IF NOT EXISTS candles_${interval}m (
+            const sql = `CREATE TABLE IF NOT EXISTS candles_${name} (
                 code TEXT,
                 timestamp INTEGER,
                 open REAL,
@@ -37,10 +48,10 @@ async function createTables() {
             )`;
             db.run(sql, (err) => {
                 if (err) {
-                    console.error(`테이블 생성 오류 (${interval}m):`, err.message);
+                    console.error(`테이블 생성 오류 (${name}):`, err.message);
                     reject(err);
                 } else {
-                    console.log(`candles_${interval}m 테이블이 생성되었습니다.`);
+                    console.log(`candles_${name} 테이블이 생성되었습니다.`);
                     resolve();
                 }
             });
@@ -54,24 +65,7 @@ function getCurrentTimestamp() {
 }
 
 function getCandleStartTime(currentTime, interval) {
-    if (interval <= 60) {
-        // 1시간 이하의 간격은 분 단위로 계산
-        return Math.floor(currentTime / (interval * 60)) * (interval * 60);
-    } else if (interval === 240) {
-        // 4시간 간격
-        return Math.floor(currentTime / (4 * 60 * 60)) * (4 * 60 * 60);
-    } else if (interval === 1440) {
-        // 1일 간격
-        const date = new Date(currentTime * 1000);
-        date.setUTCHours(0, 0, 0, 0);
-        return Math.floor(date.getTime() / 1000);
-    } else if (interval === 10080) {
-        // 1주 간격
-        const date = new Date(currentTime * 1000);
-        date.setUTCHours(0, 0, 0, 0);
-        date.setUTCDate(date.getUTCDate() - date.getUTCDay());
-        return Math.floor(date.getTime() / 1000);
-    }
+    return Math.floor(currentTime / (interval * 60)) * (interval * 60);
 }
 
 function initializeWebSocket() {
@@ -104,14 +98,14 @@ function initializeWebSocket() {
 function updateCandles(trade) {
     const currentTime = getCurrentTimestamp();
     
-    CANDLE_INTERVALS.forEach(interval => {
+    CANDLE_INTERVALS.forEach(({ interval, name }) => {
         const candleStartTime = getCandleStartTime(currentTime, interval);
         
-        if (!currentCandles[interval] || currentCandles[interval].timestamp !== candleStartTime) {
-            if (currentCandles[interval]) {
-                saveCandle(currentCandles[interval], interval);
+        if (!currentCandles[name] || currentCandles[name].timestamp !== candleStartTime) {
+            if (currentCandles[name]) {
+                saveCandle(currentCandles[name], name);
             }
-            currentCandles[interval] = {
+            currentCandles[name] = {
                 code: MARKET_CODE,
                 timestamp: candleStartTime,
                 open: trade.trade_price,
@@ -120,36 +114,23 @@ function updateCandles(trade) {
                 close: trade.trade_price
             };
         } else {
-            currentCandles[interval].high = Math.max(currentCandles[interval].high, trade.trade_price);
-            currentCandles[interval].low = Math.min(currentCandles[interval].low, trade.trade_price);
-            currentCandles[interval].close = trade.trade_price;
+            currentCandles[name].high = Math.max(currentCandles[name].high, trade.trade_price);
+            currentCandles[name].low = Math.min(currentCandles[name].low, trade.trade_price);
+            currentCandles[name].close = trade.trade_price;
         }
     });
 }
 
-function saveCandle(candle, interval) {
-    let intervalSuffix;
-    if (interval < 60) {
-        intervalSuffix = `${interval}m`;
-    } else if (interval === 60) {
-        intervalSuffix = '1h';
-    } else if (interval === 240) {
-        intervalSuffix = '4h';
-    } else if (interval === 1440) {
-        intervalSuffix = '1d';
-    } else if (interval === 10080) {
-        intervalSuffix = '1w';
-    }
-
-    const sql = `INSERT OR REPLACE INTO candles_${intervalSuffix} (code, timestamp, open, high, low, close) 
+function saveCandle(candle, intervalName) {
+    const sql = `INSERT OR REPLACE INTO candles_${intervalName} (code, timestamp, open, high, low, close) 
                  VALUES (?, ?, ?, ?, ?, ?)`;
     const values = [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close];
 
     db.run(sql, values, (err) => {
         if (err) {
-            console.error(`캔들 저장 오류 (${intervalSuffix}):`, err.message);
+            console.error(`캔들 저장 오류 (${intervalName}):`, err.message);
         } else {
-            console.log(`캔들 저장 완료 (${intervalSuffix}): ${candle.code} - ${new Date(candle.timestamp * 1000)}`);
+            console.log(`캔들 저장 완료 (${intervalName}): ${candle.code} - ${new Date(candle.timestamp * 1000)}`);
         }
     });
 }
@@ -161,9 +142,9 @@ async function main() {
         initializeWebSocket();
 
         setInterval(() => {
-            CANDLE_INTERVALS.forEach(interval => {
-                if (currentCandles[interval]) {
-                    saveCandle(currentCandles[interval], interval);
+            CANDLE_INTERVALS.forEach(({ name }) => {
+                if (currentCandles[name]) {
+                    saveCandle(currentCandles[name], name);
                 }
             });
         }, UPDATE_INTERVAL);
@@ -178,9 +159,9 @@ main();
 
 process.on('SIGINT', () => {
     console.log('프로그램을 종료합니다...');
-    CANDLE_INTERVALS.forEach(interval => {
-        if (currentCandles[interval]) {
-            saveCandle(currentCandles[interval], interval);
+    CANDLE_INTERVALS.forEach(({ name }) => {
+        if (currentCandles[name]) {
+            saveCandle(currentCandles[name], name);
         }
     });
     ws.close();
