@@ -153,14 +153,11 @@ function bulkInsertCandles(duration, candlesToInsert) {
         const sql = `INSERT OR REPLACE INTO ${tableName} (code, timestamp, open, high, low, close) VALUES ${placeholders}`;
         const values = candlesToInsert.flatMap(candle => [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close]);
 
-        db.run('BEGIN TRANSACTION');
         db.run(sql, values, function(err) {
             if (err) {
-                db.run('ROLLBACK');
                 console.error(`Bulk insert 오류 (${tableName}):`, err);
                 reject(err);
             } else {
-                db.run('COMMIT');
                 resolve(this.changes);
             }
         });
@@ -171,6 +168,8 @@ function bulkInsertCandles(duration, candlesToInsert) {
 setInterval(async () => {
     const currentTime = getCurrentTimestamp();
     const insertPromises = [];
+
+    db.run('BEGIN TRANSACTION');
 
     for (const duration of candleDurations) {
         const candlesToInsert = Object.values(candles[duration])
@@ -184,8 +183,10 @@ setInterval(async () => {
     try {
         const results = await Promise.all(insertPromises);
         const totalInserted = results.reduce((sum, count) => sum + count, 0);
+        db.run('COMMIT');
         console.log(`${totalInserted}개의 캔들 데이터가 저장되었습니다.`);
     } catch (error) {
+        db.run('ROLLBACK');
         console.error('데이터 저장 중 오류 발생:', error);
     }
 
