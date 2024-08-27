@@ -55,6 +55,7 @@ function bulkInsertCandles(duration, candlesToInsert) {
                 console.error(`Worker: Bulk insert 오류 (${tableName}):`, err);
                 reject(err);
             } else {
+                console.log(`Worker: ${this.changes}개의 ${duration}분 캔들 데이터가 저장되었습니다.`);
                 resolve(this.changes);
             }
         });
@@ -62,27 +63,39 @@ function bulkInsertCandles(duration, candlesToInsert) {
 }
 
 async function processData(data) {
-    db.run('BEGIN TRANSACTION');
-    const insertPromises = [];
+    let totalInserted = 0;
 
     for (const [duration, candles] of Object.entries(data)) {
         const candlesToInsert = Object.values(candles);
         if (candlesToInsert.length > 0) {
-            insertPromises.push(bulkInsertCandles(duration, candlesToInsert));
+            try {
+                await new Promise((resolve, reject) => {
+                    db.run('BEGIN TRANSACTION', (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+
+                const inserted = await bulkInsertCandles(duration, candlesToInsert);
+                totalInserted += inserted;
+
+                await new Promise((resolve, reject) => {
+                    db.run('COMMIT', (err) => {
+                        if (err) reject(err);
+                        else resolve();
+                    });
+                });
+            } catch (error) {
+                await new Promise((resolve) => {
+                    db.run('ROLLBACK', () => resolve());
+                });
+                console.error(`Worker: ${duration}분 캔들 데이터 저장 중 오류 발생:`, error);
+            }
         }
     }
 
-    try {
-        const results = await Promise.all(insertPromises);
-        const totalInserted = results.reduce((sum, count) => sum + count, 0);
-        db.run('COMMIT');
-        console.log(`Worker: ${totalInserted}개의 캔들 데이터가 저장되었습니다.`);
-        parentPort.postMessage({ success: true, totalInserted });
-    } catch (error) {
-        db.run('ROLLBACK');
-        console.error('Worker: 데이터 저장 중 오류 발생:', error);
-        parentPort.postMessage({ success: false, error: error.message });
-    }
+    console.log(`Worker: 총 ${totalInserted}개의 캔들 데이터가 저장되었습니다.`);
+    parentPort.postMessage({ success: true, totalInserted });
 }
 
 connectToDatabase()
