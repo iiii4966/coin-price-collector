@@ -19,27 +19,29 @@ function connectToDatabase() {
     });
 }
 
-// candles 테이블 생성 및 PRIMARY KEY, UNIQUE 제약 조건 추가
+// 각 duration에 대한 테이블 생성
 async function initializeDatabase() {
     try {
         await connectToDatabase();
-        await new Promise((resolve, reject) => {
-            db.serialize(() => {
-                db.run(`CREATE TABLE IF NOT EXISTS candles (
+        const createTablePromises = candleDurations.map(duration => {
+            return new Promise((resolve, reject) => {
+                const tableName = `candles_${duration}`;
+                db.run(`CREATE TABLE IF NOT EXISTS ${tableName} (
                     code TEXT,
                     timestamp INTEGER,
-                    duration INTEGER,
                     open REAL,
                     high REAL,
                     low REAL,
                     close REAL,
-                    CONSTRAINT Candle_PK PRIMARY KEY (code, timestamp, duration)
+                    CONSTRAINT ${tableName}_PK PRIMARY KEY (code, timestamp)
                 )`, (err) => {
                     if (err) reject(err);
                     else resolve();
                 });
             });
         });
+
+        await Promise.all(createTablePromises);
         console.log('데이터베이스 초기화 완료');
     } catch (error) {
         console.error('데이터베이스 초기화 오류:', error);
@@ -149,16 +151,17 @@ setInterval(() => {
     const promises = [];
 
     candleDurations.forEach(duration => {
+        const tableName = `candles_${duration}`;
         for (const candleKey in candles[duration]) {
             const candle = candles[duration][candleKey];
             if (candle.lastUpdated < currentTime - 5) {  // 5초 이상 업데이트되지 않은 캔들만 저장
                 promises.push(new Promise((resolve, reject) => {
-                    db.run(`INSERT OR REPLACE INTO candles (code, timestamp, duration, open, high, low, close)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                        [candle.code, candle.timestamp, candle.duration, candle.open, candle.high, candle.low, candle.close],
+                    db.run(`INSERT OR REPLACE INTO ${tableName} (code, timestamp, open, high, low, close)
+                            VALUES (?, ?, ?, ?, ?, ?)`,
+                        [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
                         function(err) {
                             if (err) {
-                                console.error('데이터베이스 저장 오류:', err);
+                                console.error(`데이터베이스 저장 오류 (${tableName}):`, err);
                                 reject(err);
                             } else {
                                 resolve();
