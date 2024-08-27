@@ -28,11 +28,12 @@ async function initializeDatabase() {
                 db.run(`CREATE TABLE IF NOT EXISTS candles (
                     code TEXT,
                     timestamp INTEGER,
+                    duration INTEGER,
                     open REAL,
                     high REAL,
                     low REAL,
                     close REAL,
-                    CONSTRAINT Candle_PK PRIMARY KEY (code, timestamp)
+                    CONSTRAINT Candle_PK PRIMARY KEY (code, timestamp, duration)
                 )`, (err) => {
                     if (err) reject(err);
                     else resolve();
@@ -54,7 +55,10 @@ initializeDatabase().then(() => {
 let ws;
 let request;
 const candles = {};
-const candleDuration = 1; // 캔들 기간 (분)
+candleDurations.forEach(duration => {
+    candles[duration] = {};
+});
+const candleDurations = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080]; // 캔들 기간 (분)
 
 let marketCodes = [];
 
@@ -104,39 +108,40 @@ function connect() {
     });
 
     ws.addEventListener('message', (event) => {
-    const data = JSON.parse(event.data);
+        const data = JSON.parse(event.data);
 
-    if (data.type === 'trade') {
-        const {code, trade_timestamp, trade_price} = data;
-        
-        // 캔들 키 생성 (코인-기간)
-        const candleKey = `${code}-${candleDuration}`;
-
-        // 현재 시간을 기준으로 캔들의 시작 시간 계산
-        const currentCandleStartTime = Math.floor(trade_timestamp / (candleDuration * 60000)) * (candleDuration * 60000);
-
-        // 캔들 초기화 또는 새 캔들 시작
-        if (!candles[candleKey] || currentCandleStartTime > candles[candleKey].timestamp) {
-            candles[candleKey] = {
-                code,
-                duration: candleDuration,
-                open: trade_price,
-                high: trade_price,
-                low: trade_price,
-                close: trade_price,
-                timestamp: currentCandleStartTime,
-                lastUpdated: getCurrentTimestamp(),
-            };
-        } else {
-            // 캔들 업데이트
-            const candle = candles[candleKey];
-            candle.close = trade_price;
-            candle.high = Math.max(candle.high, trade_price);
-            candle.low = Math.min(candle.low, trade_price);
-            candle.lastUpdated = getCurrentTimestamp();
+        if (data.type === 'trade') {
+            const {code, trade_timestamp, trade_price} = data;
+            
+            candleDurations.forEach(duration => {
+                updateCandle(code, trade_timestamp, trade_price, duration);
+            });
         }
+    });
+
+function updateCandle(code, trade_timestamp, trade_price, duration) {
+    const currentCandleStartTime = Math.floor(trade_timestamp / (duration * 60000)) * (duration * 60000);
+    const candleKey = `${code}-${currentCandleStartTime}`;
+
+    if (!candles[duration][candleKey]) {
+        candles[duration][candleKey] = {
+            code,
+            duration,
+            open: trade_price,
+            high: trade_price,
+            low: trade_price,
+            close: trade_price,
+            timestamp: currentCandleStartTime,
+            lastUpdated: getCurrentTimestamp(),
+        };
+    } else {
+        const candle = candles[duration][candleKey];
+        candle.close = trade_price;
+        candle.high = Math.max(candle.high, trade_price);
+        candle.low = Math.min(candle.low, trade_price);
+        candle.lastUpdated = getCurrentTimestamp();
     }
-});
+}
 }
 
 // 5초마다 모든 OHLC 데이터를 SQLite에 저장
@@ -144,27 +149,46 @@ setInterval(() => {
     const currentTime = getCurrentTimestamp();
     const promises = [];
 
-    for (const candleKey in candles) {
-        const candle = candles[candleKey];
-        promises.push(new Promise((resolve, reject) => {
-            db.run(`INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close)
-                    VALUES (?, ?, ?, ?, ?, ?)`,
-                [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
-                function(err) {
-                    if (err) {
-                        console.error('데이터베이스 저장 오류:', err);
-                        reject(err);
-                    } else {
-                        resolve();
-                    }
-                });
-        }));
-    }
+    candleDurations.forEach(duration => {
+        for (const candleKey in candles[duration]) {
+            const candle = candles[duration][candleKey];
+            if (candle.lastUpdated < currentTime - 5) {  // 5초 이상 업데이트되지 않은 캔들만 저장
+                promises.push(new Promise((resolve, reject) => {
+                    db.run(`INSERT OR REPLACE INTO candles (code, timestamp, duration, open, high, low, close)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [candle.code, candle.timestamp, candle.duration, candle.open, candle.high, candle.low, candle.close],
+                        function(err) {
+                            if (err) {
+                                console.error('데이터베이스 저장 오류:', err);
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                }));
+            }
+        }
+    });
 
     Promise.all(promises)
-        .then(() => console.log(`${Object.keys(candles).length}개의 캔들 데이터가 저장되었습니다.`))
+        .then(() => console.log(`${promises.length}개의 캔들 데이터가 저장되었습니다.`))
         .catch(error => console.error('데이터 저장 중 오류 발생:', error));
+
+    // 오래된 캔들 데이터 정리
+    cleanOldCandles();
 }, 5000);
+
+function cleanOldCandles() {
+    const currentTime = getCurrentTimestamp();
+    candleDurations.forEach(duration => {
+        for (const candleKey in candles[duration]) {
+            const candle = candles[duration][candleKey];
+            if (candle.lastUpdated < currentTime - duration * 60) {
+                delete candles[duration][candleKey];
+            }
+        }
+    });
+}
 
 // 프로그램 종료 시 데이터베이스 연결 종료
 process.on('SIGINT', () => {
