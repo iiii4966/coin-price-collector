@@ -98,7 +98,6 @@ function createChart(data) {
                     animationDuration: 0  // 호버 애니메이션 비활성화
                 },
                 responsiveAnimationDuration: 0  // 반응형 애니메이션 비활성화
-                }
             }
         });
     } catch (error) {
