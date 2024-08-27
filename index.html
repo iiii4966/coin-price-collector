@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>업비트 캔들 차트</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+</head>
+<body>
+    <h1>업비트 캔들 차트</h1>
+    <div id="interval-buttons">
+        <button data-interval="1">1분</button>
+        <button data-interval="3">3분</button>
+        <button data-interval="5">5분</button>
+        <button data-interval="10">10분</button>
+        <button data-interval="15">15분</button>
+        <button data-interval="30">30분</button>
+        <button data-interval="60">60분</button>
+    </div>
+    <div id="chart-container">
+        <canvas id="candleChart"></canvas>
+    </div>
+    <script src="/candleChart.js"></script>
+</body>
+</html>
