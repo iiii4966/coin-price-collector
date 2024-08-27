@@ -145,36 +145,49 @@ function updateCandle(code, trade_timestamp, trade_price, duration) {
 }
 }
 
-// 5초마다 모든 OHLC 데이터를 SQLite에 저장
-setInterval(() => {
-    const currentTime = getCurrentTimestamp();
-    const promises = [];
-
-    candleDurations.forEach(duration => {
+// Bulk insert 함수
+function bulkInsertCandles(duration, candlesToInsert) {
+    return new Promise((resolve, reject) => {
         const tableName = `candles_${duration}`;
-        for (const candleKey in candles[duration]) {
-            const candle = candles[duration][candleKey];
-            if (candle.lastUpdated < currentTime - 5) {  // 5초 이상 업데이트되지 않은 캔들만 저장
-                promises.push(new Promise((resolve, reject) => {
-                    db.run(`INSERT OR REPLACE INTO ${tableName} (code, timestamp, open, high, low, close)
-                            VALUES (?, ?, ?, ?, ?, ?)`,
-                        [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close],
-                        function(err) {
-                            if (err) {
-                                console.error(`데이터베이스 저장 오류 (${tableName}):`, err);
-                                reject(err);
-                            } else {
-                                resolve();
-                            }
-                        });
-                }));
-            }
-        }
-    });
+        const placeholders = candlesToInsert.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+        const sql = `INSERT OR REPLACE INTO ${tableName} (code, timestamp, open, high, low, close) VALUES ${placeholders}`;
+        const values = candlesToInsert.flatMap(candle => [candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close]);
 
-    Promise.all(promises)
-        .then(() => console.log(`${promises.length}개의 캔들 데이터가 저장되었습니다.`))
-        .catch(error => console.error('데이터 저장 중 오류 발생:', error));
+        db.run('BEGIN TRANSACTION');
+        db.run(sql, values, function(err) {
+            if (err) {
+                db.run('ROLLBACK');
+                console.error(`Bulk insert 오류 (${tableName}):`, err);
+                reject(err);
+            } else {
+                db.run('COMMIT');
+                resolve(this.changes);
+            }
+        });
+    });
+}
+
+// 5초마다 모든 OHLC 데이터를 SQLite에 저장
+setInterval(async () => {
+    const currentTime = getCurrentTimestamp();
+    const insertPromises = [];
+
+    for (const duration of candleDurations) {
+        const candlesToInsert = Object.values(candles[duration])
+            .filter(candle => candle.lastUpdated < currentTime - 5);
+
+        if (candlesToInsert.length > 0) {
+            insertPromises.push(bulkInsertCandles(duration, candlesToInsert));
+        }
+    }
+
+    try {
+        const results = await Promise.all(insertPromises);
+        const totalInserted = results.reduce((sum, count) => sum + count, 0);
+        console.log(`${totalInserted}개의 캔들 데이터가 저장되었습니다.`);
+    } catch (error) {
+        console.error('데이터 저장 중 오류 발생:', error);
+    }
 
     // 오래된 캔들 데이터 정리
     cleanOldCandles();
