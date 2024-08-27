@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
 
 // SQLite 데이터베이스 연결
 let db;
@@ -52,19 +53,40 @@ const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 const candles = {};
 const candleDuration = 1; // 캔들 기간 (분)
 
-const request = [
-    {ticket: 'test'},
-    {type: 'trade', codes: ['KRW-BTC', 'KRW-ETH', 'KRW-XRP']},
-];
+let marketCodes = [];
+
+async function getMarketCodes() {
+    try {
+        const response = await axios.get('https://api.upbit.com/v1/market/all?isDetails=false');
+        marketCodes = response.data
+            .filter(market => market.market.startsWith('KRW-'))
+            .map(market => market.market);
+        console.log(`총 ${marketCodes.length}개의 KRW 마켓 코드를 가져왔습니다.`);
+    } catch (error) {
+        console.error('마켓 코드 조회 중 오류 발생:', error);
+        process.exit(1);
+    }
+}
 
 function getCurrentTimestamp() {
     return Math.floor(Date.now() / 1000);
 }
 
-ws.addEventListener('open', () => {
-    console.log('업비트 WebSocket에 연결되었습니다.');
-    ws.send(JSON.stringify(request));
-});
+async function initializeWebSocket() {
+    await getMarketCodes();
+
+    const request = [
+        {ticket: 'test'},
+        {type: 'trade', codes: marketCodes},
+    ];
+
+    ws.addEventListener('open', () => {
+        console.log('업비트 WebSocket에 연결되었습니다.');
+        ws.send(JSON.stringify(request));
+    });
+}
+
+initializeWebSocket();
 
 ws.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
