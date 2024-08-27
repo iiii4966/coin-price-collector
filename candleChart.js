@@ -25,6 +25,14 @@ function createChart(data) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        left: 10,
+                        right: 30,
+                        top: 20,
+                        bottom: 10
+                    }
+                },
                 scales: {
                     x: {
                         type: 'time',
@@ -41,23 +49,43 @@ function createChart(data) {
                         }
                     },
                     y: {
+                        position: 'right',
                         title: {
                             display: true,
                             text: '가격 (KRW)'
+                        },
+                        ticks: {
+                            callback: function(value, index, values) {
+                                return value.toLocaleString() + ' ₩';
+                            }
                         }
                     }
                 },
                 plugins: {
                     legend: {
                         display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const d = context.raw;
+                                return [
+                                    `시가: ${d.o.toLocaleString()} ₩`,
+                                    `고가: ${d.h.toLocaleString()} ₩`,
+                                    `저가: ${d.l.toLocaleString()} ₩`,
+                                    `종가: ${d.c.toLocaleString()} ₩`
+                                ];
+                            }
+                        }
                     }
                 },
                 elements: {
                     candlestick: {
                         width: function(ctx) {
                             const visiblePoints = ctx.chart.scales.x.max - ctx.chart.scales.x.min;
-                            const barWidth = Math.max(1, Math.round(ctx.chart.width / visiblePoints));
-                            return Math.min(barWidth, 15);  // 최대 너비를 15픽셀로 제한
+                            const availableWidth = ctx.chart.width - ctx.chart.chartArea.left - 30; // 오른쪽 여백 고려
+                            const barWidth = Math.max(1, Math.floor(availableWidth / visiblePoints));
+                            return Math.min(barWidth, 10);  // 최대 너비를 10픽셀로 제한
                         }
                     }
                 }
