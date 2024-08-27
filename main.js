@@ -82,7 +82,8 @@ function connect() {
     });
 
 function updateCandle(code, trade_timestamp, trade_price, duration) {
-    const currentCandleStartTime = Math.floor(trade_timestamp / (duration * 60000)) * (duration * 60000);
+    const currentTime = getCurrentTimestamp();
+    const currentCandleStartTime = Math.floor(currentTime / (duration * 60)) * (duration * 60);
     const candleKey = `${code}-${currentCandleStartTime}`;
 
     if (!candles[duration][candleKey]) {
@@ -94,45 +95,27 @@ function updateCandle(code, trade_timestamp, trade_price, duration) {
             low: trade_price,
             close: trade_price,
             timestamp: currentCandleStartTime,
-            lastUpdated: getCurrentTimestamp(),
+            lastUpdated: currentTime,
         };
     } else {
         const candle = candles[duration][candleKey];
         candle.close = trade_price;
         candle.high = Math.max(candle.high, trade_price);
         candle.low = Math.min(candle.low, trade_price);
-        candle.lastUpdated = getCurrentTimestamp();
+        candle.lastUpdated = currentTime;
+    }
+
+    // 이전 캔들 처리
+    const previousCandleStartTime = currentCandleStartTime - duration * 60;
+    const previousCandleKey = `${code}-${previousCandleStartTime}`;
+    if (candles[duration][previousCandleKey]) {
+        dbWorker.postMessage({ [duration]: [candles[duration][previousCandleKey]] });
+        delete candles[duration][previousCandleKey];
     }
 }
 }
 
-// 5초마다 모든 OHLC 데이터를 Worker에 전송
-setInterval(() => {
-    const currentTime = getCurrentTimestamp();
-    const candlesToInsert = {};
-
-    for (const duration of candleDurations) {
-        candlesToInsert[duration] = Object.values(candles[duration])
-            .filter(candle => candle.lastUpdated < currentTime - 5);
-    }
-
-    dbWorker.postMessage(candlesToInsert);
-
-    // 오래된 캔들 데이터 정리
-    cleanOldCandles();
-}, 5000);
-
-function cleanOldCandles() {
-    const currentTime = getCurrentTimestamp();
-    candleDurations.forEach(duration => {
-        for (const candleKey in candles[duration]) {
-            const candle = candles[duration][candleKey];
-            if (candle.lastUpdated < currentTime - duration * 60) {
-                delete candles[duration][candleKey];
-            }
-        }
-    });
-}
+// 인터벌과 cleanOldCandles 함수 제거
 
 // 프로그램 종료 시 Worker 종료
 process.on('SIGINT', () => {
