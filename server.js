@@ -3,7 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const app = express();
-const port = 3000;
+const port = 3003;
 
 app.use(express.static('public'));
 
@@ -33,7 +33,7 @@ app.get('/', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`서버가 http://localhost:${port} 에서 실행 중입니다.`);
+    console.log(`서버가 http://localhost:3003 에서 실행 중입니다.`);
 });
 
 process.on('SIGINT', () => {
