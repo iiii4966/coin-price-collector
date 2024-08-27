@@ -25,6 +25,7 @@ function createChart(data) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                aspectRatio: 2,  // 차트의 가로:세로 비율을 2:1로 설정
                 layout: {
                     padding: {
                         left: 10,
@@ -86,8 +87,8 @@ function createChart(data) {
                             const visiblePoints = ctx.chart.scales.x.max - ctx.chart.scales.x.min;
                             const availableWidth = ctx.chart.width - ctx.chart.chartArea.left - 30;
                             let barWidth = Math.max(1, Math.floor(availableWidth / visiblePoints));
-                            barWidth = Math.min(barWidth, 15);  // 최대 너비를 15픽셀로 제한
-                            return Math.max(barWidth, 2);  // 최소 너비를 2픽셀로 설정
+                            barWidth = Math.min(barWidth, 30);  // 최대 너비를 30픽셀로 확장
+                            return Math.max(barWidth, 3);  // 최소 너비를 3픽셀로 설정
                         }
                     }
                 },
