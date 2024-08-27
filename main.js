@@ -48,7 +48,7 @@ async function initializeDatabase() {
 
 // 데이터베이스 초기화 실행
 initializeDatabase();
-const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+let ws;
 
 const candles = {};
 const candleDuration = 1; // 캔들 기간 (분)
@@ -97,17 +97,7 @@ async function initializeWebSocket() {
             console.error('WebSocket 오류:', error);
         });
 
-        setupMessageHandler();
-    }
-
-    connect();
-}
-
-initializeWebSocket();
-
-function setupMessageHandler() {
-
-    ws.addEventListener('message', (event) => {
+        ws.addEventListener('message', (event) => {
         const data = JSON.parse(event.data);
 
         if (data.type === 'trade') {
