@@ -17,6 +17,32 @@ function connectToDatabase() {
     });
 }
 
+async function createTables() {
+    const candleDurations = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080];
+    for (const duration of candleDurations) {
+        await new Promise((resolve, reject) => {
+            const sql = `CREATE TABLE IF NOT EXISTS candles_${duration} (
+                code TEXT,
+                timestamp INTEGER,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                PRIMARY KEY (code, timestamp)
+            )`;
+            db.run(sql, (err) => {
+                if (err) {
+                    console.error(`Worker: 테이블 생성 오류 (candles_${duration}):`, err);
+                    reject(err);
+                } else {
+                    console.log(`Worker: candles_${duration} 테이블이 생성되었습니다.`);
+                    resolve();
+                }
+            });
+        });
+    }
+}
+
 function bulkInsertCandles(duration, candlesToInsert) {
     return new Promise((resolve, reject) => {
         const tableName = `candles_${duration}`;
@@ -59,9 +85,16 @@ async function processData(data) {
     }
 }
 
-connectToDatabase().then(() => {
-    parentPort.on('message', processData);
-});
+connectToDatabase()
+    .then(() => createTables())
+    .then(() => {
+        console.log('Worker: 모든 테이블이 생성되었습니다.');
+        parentPort.on('message', processData);
+    })
+    .catch((error) => {
+        console.error('Worker: 초기화 중 오류 발생:', error);
+        process.exit(1);
+    });
 
 process.on('SIGINT', () => {
     console.log('Worker: 프로그램을 종료합니다...');
