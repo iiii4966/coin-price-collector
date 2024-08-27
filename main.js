@@ -3,6 +3,7 @@ const axios = require('axios');
 const { Worker } = require('worker_threads');
 
 const dbWorker = new Worker('./dbWorker.js');
+const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 
 dbWorker.on('message', (message) => {
     if (message.success) {
@@ -115,11 +116,36 @@ function updateCandle(code, trade_timestamp, trade_price, duration) {
 }
 }
 
-// 인터벌과 cleanOldCandles 함수 제거
+// 모든 캔들 업데이트 및 DB에 저장
+function updateAllCandles() {
+    const currentTime = getCurrentTimestamp();
+    const candlesToUpdate = {};
 
-// 프로그램 종료 시 Worker 종료
+    candleDurations.forEach(duration => {
+        candlesToUpdate[duration] = Object.values(candles[duration]).filter(candle => 
+            candle.lastUpdated <= currentTime - duration * 60
+        );
+        
+        // 업데이트된 캔들 제거
+        candlesToUpdate[duration].forEach(candle => {
+            delete candles[duration][`${candle.code}-${candle.timestamp}`];
+        });
+    });
+
+    // Worker에 데이터 전송
+    if (Object.values(candlesToUpdate).some(arr => arr.length > 0)) {
+        dbWorker.postMessage(candlesToUpdate);
+    }
+}
+
+// 주기적으로 캔들 업데이트
+const updateInterval = setInterval(updateAllCandles, UPDATE_INTERVAL);
+
+// 프로그램 종료 시 Worker 종료 및 인터벌 정리
 process.on('SIGINT', () => {
     console.log('메인: 프로그램을 종료합니다...');
+    clearInterval(updateInterval);
+    updateAllCandles(); // 마지막으로 모든 캔들 업데이트
     dbWorker.terminate().then(() => {
         console.log('메인: Worker가 안전하게 종료되었습니다.');
         process.exit();
