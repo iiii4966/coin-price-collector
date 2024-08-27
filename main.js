@@ -80,57 +80,60 @@ async function initializeWebSocket() {
         {type: 'trade', codes: marketCodes},
     ];
 
-    function connect() {
-        ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+    connect();
+}
 
-        ws.addEventListener('open', () => {
-            console.log('업비트 WebSocket에 연결되었습니다.');
-            ws.send(JSON.stringify(request));
-        });
+function connect() {
+    ws = new WebSocket('wss://api.upbit.com/websocket/v1');
 
-        ws.addEventListener('close', () => {
-            console.log('업비트 WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
-            setTimeout(connect, 5000);
-        });
-
-        ws.addEventListener('error', (error) => {
-            console.error('WebSocket 오류:', error);
-        });
-
-        ws.addEventListener('message', (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === 'trade') {
-            const {code, trade_timestamp, trade_price} = data;
-            
-            // 캔들 키 생성 (코인-기간)
-            const candleKey = `${code}-${candleDuration}`;
-
-            // 현재 시간을 기준으로 캔들의 시작 시간 계산
-            const currentCandleStartTime = Math.floor(trade_timestamp / (candleDuration * 60000)) * (candleDuration * 60000);
-
-            // 캔들 초기화 또는 새 캔들 시작
-            if (!candles[candleKey] || currentCandleStartTime > candles[candleKey].timestamp) {
-                candles[candleKey] = {
-                    code,
-                    duration: candleDuration,
-                    open: trade_price,
-                    high: trade_price,
-                    low: trade_price,
-                    close: trade_price,
-                    timestamp: currentCandleStartTime,
-                    lastUpdated: getCurrentTimestamp(),
-                };
-            } else {
-                // 캔들 업데이트
-                const candle = candles[candleKey];
-                candle.close = trade_price;
-                candle.high = Math.max(candle.high, trade_price);
-                candle.low = Math.min(candle.low, trade_price);
-                candle.lastUpdated = getCurrentTimestamp();
-            }
-        }
+    ws.addEventListener('open', () => {
+        console.log('업비트 WebSocket에 연결되었습니다.');
+        ws.send(JSON.stringify(request));
     });
+
+    ws.addEventListener('close', () => {
+        console.log('업비트 WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
+        setTimeout(connect, 5000);
+    });
+
+    ws.addEventListener('error', (error) => {
+        console.error('WebSocket 오류:', error);
+    });
+
+    ws.addEventListener('message', (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.type === 'trade') {
+        const {code, trade_timestamp, trade_price} = data;
+        
+        // 캔들 키 생성 (코인-기간)
+        const candleKey = `${code}-${candleDuration}`;
+
+        // 현재 시간을 기준으로 캔들의 시작 시간 계산
+        const currentCandleStartTime = Math.floor(trade_timestamp / (candleDuration * 60000)) * (candleDuration * 60000);
+
+        // 캔들 초기화 또는 새 캔들 시작
+        if (!candles[candleKey] || currentCandleStartTime > candles[candleKey].timestamp) {
+            candles[candleKey] = {
+                code,
+                duration: candleDuration,
+                open: trade_price,
+                high: trade_price,
+                low: trade_price,
+                close: trade_price,
+                timestamp: currentCandleStartTime,
+                lastUpdated: getCurrentTimestamp(),
+            };
+        } else {
+            // 캔들 업데이트
+            const candle = candles[candleKey];
+            candle.close = trade_price;
+            candle.high = Math.max(candle.high, trade_price);
+            candle.low = Math.min(candle.low, trade_price);
+            candle.lastUpdated = getCurrentTimestamp();
+        }
+    }
+});
 }
 
 // 5초마다 모든 OHLC 데이터를 SQLite에 저장
