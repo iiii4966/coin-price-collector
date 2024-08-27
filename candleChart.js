@@ -47,7 +47,7 @@ function createChart(data) {
 }
 
 function fetchData(interval) {
-    fetch(`/api/candles/${interval}`)
+    fetch(`/api/candles/${interval}m`)
         .then(response => response.json())
         .then(data => {
             if (data && data.length > 0) {
