@@ -46,10 +46,13 @@ async function initializeDatabase() {
     }
 }
 
-// 데이터베이스 초기화 실행
-initializeDatabase();
-let ws;
+// 데이터베이스 초기화 실행 후 WebSocket 초기화
+initializeDatabase().then(() => {
+    initializeWebSocket();
+});
 
+let ws;
+let request;
 const candles = {};
 const candleDuration = 1; // 캔들 기간 (분)
 
@@ -75,7 +78,7 @@ function getCurrentTimestamp() {
 async function initializeWebSocket() {
     await getMarketCodes();
 
-    const request = [
+    request = [
         {ticket: 'test'},
         {type: 'trade', codes: marketCodes},
     ];
