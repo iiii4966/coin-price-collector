@@ -204,12 +204,20 @@ async function main() {
 
 main();
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     console.log('프로그램을 종료합니다...');
-    for (const productId in currentCandles) {
-        saveCandle(currentCandles[productId]);
-    }
     ws.close();
+
+    const candlesToSave = Object.values(currentCandles);
+    if (candlesToSave.length > 0) {
+        try {
+            await bulkSaveCandles(candlesToSave);
+            console.log(`${candlesToSave.length}개의 종목 캔들 데이터가 저장되었습니다.`);
+        } catch (error) {
+            console.error('종료 시 캔들 데이터 저장 중 오류 발생:', error);
+        }
+    }
+
     db.close((err) => {
         if (err) {
             console.error('데이터베이스 종료 오류:', err.message);
