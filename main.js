@@ -1,13 +1,31 @@
 const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
 
-const PRODUCT_ID = 'BTC-USD';
 const CANDLE_INTERVAL = 60; // 1분 캔들
 const SAVE_INTERVAL = 5; // 5초마다 저장
 
 let ws;
-let currentCandle = null;
+let currentCandles = {};
 let db;
+
+async function getCoinbaseProducts() {
+    try {
+        const response = await axios.get('https://api.exchange.coinbase.com/products');
+        const products = response.data;
+
+        const filteredProducts = products.filter(product => 
+            product.quote_currency === 'USD' && 
+            (product.status === 'online' || product.status === 'offline')
+        );
+
+        console.log(`필터링된 상품 수: ${filteredProducts.length}`);
+        return filteredProducts.map(product => product.id);
+    } catch (error) {
+        console.error('API 요청 중 오류 발생:', error.message);
+        return [];
+    }
+}
 
 function connectToDatabase() {
     return new Promise((resolve, reject) => {
@@ -55,14 +73,14 @@ function getCandleStartTime(currentTime) {
     return Math.floor(currentTime / CANDLE_INTERVAL) * CANDLE_INTERVAL;
 }
 
-function initializeWebSocket() {
+function initializeWebSocket(productIds) {
     ws = new WebSocket('wss://ws-feed.exchange.coinbase.com');
 
     ws.on('open', () => {
         console.log('Coinbase WebSocket에 연결되었습니다.');
         const subscribeMessage = {
             type: 'subscribe',
-            product_ids: [PRODUCT_ID],
+            product_ids: productIds,
             channels: ['matches']
         };
         ws.send(JSON.stringify(subscribeMessage));
@@ -70,7 +88,7 @@ function initializeWebSocket() {
 
     ws.on('close', () => {
         console.log('Coinbase WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
-        setTimeout(initializeWebSocket, 5000);
+        setTimeout(() => initializeWebSocket(productIds), 5000);
     });
 
     ws.on('error', (error) => {
@@ -90,13 +108,14 @@ function updateCandle(trade) {
     const candleStartTime = getCandleStartTime(currentTime);
     const price = parseFloat(trade.price);
     const size = parseFloat(trade.size);
+    const productId = trade.product_id;
 
-    if (!currentCandle || currentCandle.timestamp !== candleStartTime) {
-        if (currentCandle) {
-            saveCandle(currentCandle);
+    if (!currentCandles[productId] || currentCandles[productId].timestamp !== candleStartTime) {
+        if (currentCandles[productId]) {
+            saveCandle(currentCandles[productId]);
         }
-        currentCandle = {
-            product_id: PRODUCT_ID,
+        currentCandles[productId] = {
+            product_id: productId,
             timestamp: candleStartTime,
             open: price,
             high: price,
@@ -105,10 +124,11 @@ function updateCandle(trade) {
             volume: size
         };
     } else {
-        currentCandle.high = Math.max(currentCandle.high, price);
-        currentCandle.low = Math.min(currentCandle.low, price);
-        currentCandle.close = price;
-        currentCandle.volume += size;
+        const candle = currentCandles[productId];
+        candle.high = Math.max(candle.high, price);
+        candle.low = Math.min(candle.low, price);
+        candle.close = price;
+        candle.volume += size;
     }
 }
 
@@ -130,26 +150,28 @@ async function main() {
     try {
         await connectToDatabase();
         await createTable();
-        initializeWebSocket();
+        const productIds = await getCoinbaseProducts();
+        initializeWebSocket(productIds);
 
         setInterval(() => {
-            if (currentCandle) {
-                const currentTime = getCurrentTimestamp();
-                const candleStartTime = getCandleStartTime(currentTime);
-                
-                if (currentCandle.timestamp !== candleStartTime) {
-                    saveCandle(currentCandle, true);
-                    currentCandle = {
-                        product_id: PRODUCT_ID,
+            const currentTime = getCurrentTimestamp();
+            const candleStartTime = getCandleStartTime(currentTime);
+            
+            for (const productId in currentCandles) {
+                const candle = currentCandles[productId];
+                if (candle.timestamp !== candleStartTime) {
+                    saveCandle(candle, true);
+                    currentCandles[productId] = {
+                        product_id: productId,
                         timestamp: candleStartTime,
-                        open: currentCandle.close,
-                        high: currentCandle.close,
-                        low: currentCandle.close,
-                        close: currentCandle.close,
+                        open: candle.close,
+                        high: candle.close,
+                        low: candle.close,
+                        close: candle.close,
                         volume: 0
                     };
                 } else {
-                    saveCandle(currentCandle, false);
+                    saveCandle(candle, false);
                 }
             }
         }, SAVE_INTERVAL * 1000);
@@ -164,8 +186,8 @@ main();
 
 process.on('SIGINT', () => {
     console.log('프로그램을 종료합니다...');
-    if (currentCandle) {
-        saveCandle(currentCandle);
+    for (const productId in currentCandles) {
+        saveCandle(currentCandles[productId]);
     }
     ws.close();
     db.close((err) => {
