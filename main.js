@@ -3,6 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 
 const PRODUCT_ID = 'BTC-USD';
 const CANDLE_INTERVAL = 60; // 1분 캔들
+const SAVE_INTERVAL = 5; // 5초마다 저장
 
 let ws;
 let currentCandle = null;
@@ -111,7 +112,7 @@ function updateCandle(trade) {
     }
 }
 
-function saveCandle(candle) {
+function saveCandle(candle, isComplete = false) {
     const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
                  VALUES (?, ?, ?, ?, ?, ?, ?)`;
     const values = [candle.product_id, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume];
@@ -120,7 +121,7 @@ function saveCandle(candle) {
         if (err) {
             console.error('캔들 저장 오류:', err.message);
         } else {
-            console.log(`캔들 저장 완료: ${candle.product_id} - ${new Date(candle.timestamp * 1000)}`);
+            console.log(`캔들 ${isComplete ? '완료' : '중간'} 저장: ${candle.product_id} - ${new Date(candle.timestamp * 1000)}`);
         }
     });
 }
@@ -133,9 +134,25 @@ async function main() {
 
         setInterval(() => {
             if (currentCandle) {
-                saveCandle(currentCandle);
+                const currentTime = getCurrentTimestamp();
+                const candleStartTime = getCandleStartTime(currentTime);
+                
+                if (currentCandle.timestamp !== candleStartTime) {
+                    saveCandle(currentCandle, true);
+                    currentCandle = {
+                        product_id: PRODUCT_ID,
+                        timestamp: candleStartTime,
+                        open: currentCandle.close,
+                        high: currentCandle.close,
+                        low: currentCandle.close,
+                        close: currentCandle.close,
+                        volume: 0
+                    };
+                } else {
+                    saveCandle(currentCandle, false);
+                }
             }
-        }, CANDLE_INTERVAL * 1000);
+        }, SAVE_INTERVAL * 1000);
 
     } catch (error) {
         console.error('초기화 중 오류 발생:', error);
