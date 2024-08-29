@@ -58,27 +58,36 @@ async function aggregateCandles(interval) {
     return new Promise((resolve, reject) => {
         const sql = `
             SELECT product_id, 
-                   MIN(timestamp) as timestamp,
-                   (SELECT open FROM candles c2 
-                    WHERE c2.product_id = c1.product_id 
-                    AND c2.timestamp = MIN(c1.timestamp)) as open,
+                   timestamp / (? * 60) * (? * 60) as interval_start,
+                   MIN(timestamp) as first_timestamp,
+                   MAX(timestamp) as last_timestamp,
+                   MIN(open) as open,
                    MAX(high) as high,
                    MIN(low) as low,
-                   (SELECT close FROM candles c2 
-                    WHERE c2.product_id = c1.product_id 
-                    AND c2.timestamp = MAX(c1.timestamp)) as close,
+                   MAX(close) as close,
                    SUM(volume) as volume
-            FROM candles c1
+            FROM candles
             WHERE timestamp >= ? AND timestamp < ?
-            GROUP BY product_id, timestamp / (? * 60)
+            GROUP BY product_id, interval_start
+            ORDER BY product_id, interval_start
         `;
 
-        db.all(sql, [startTime, currentTime, interval], (err, rows) => {
+        db.all(sql, [interval, interval, startTime, currentTime], (err, rows) => {
             if (err) {
                 console.error(`${interval}분 캔들 집계 오류:`, err.message);
                 reject(err);
             } else {
-                resolve(rows);
+                // 추가 처리: 각 그룹의 첫 번째와 마지막 캔들에서 open과 close 값을 가져옵니다.
+                const processedRows = rows.map(row => ({
+                    product_id: row.product_id,
+                    timestamp: row.interval_start,
+                    open: row.open,
+                    high: row.high,
+                    low: row.low,
+                    close: row.close,
+                    volume: row.volume
+                }));
+                resolve(processedRows);
             }
         });
     });
