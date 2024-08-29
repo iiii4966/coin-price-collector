@@ -6,7 +6,7 @@ const CANDLE_INTERVAL = 60; // 1분 캔들
 const SAVE_INTERVAL = 5; // 5초마다 저장
 
 let ws;
-let currentCandles = {};
+let candles = {};
 let db;
 
 async function getCoinbaseProducts() {
