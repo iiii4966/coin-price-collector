@@ -110,11 +110,18 @@ function updateCandle(trade) {
     const size = parseFloat(trade.size);
     const productId = trade.product_id;
 
-    if (!currentCandles[productId] || currentCandles[productId].timestamp !== candleStartTime) {
-        if (currentCandles[productId]) {
-            saveCandle(currentCandles[productId]);
+    if (!candles[productId]) {
+        candles[productId] = {
+            current: null,
+            previous: null
+        };
+    }
+
+    if (!candles[productId].current || candles[productId].current.timestamp !== candleStartTime) {
+        if (candles[productId].current) {
+            candles[productId].previous = candles[productId].current;
         }
-        currentCandles[productId] = {
+        candles[productId].current = {
             product_id: productId,
             timestamp: candleStartTime,
             open: price,
@@ -124,7 +131,7 @@ function updateCandle(trade) {
             volume: size
         };
     } else {
-        const candle = currentCandles[productId];
+        const candle = candles[productId].current;
         candle.high = Math.max(candle.high, price);
         candle.low = Math.min(candle.low, price);
         candle.close = price;
@@ -171,18 +178,24 @@ async function main() {
             const candleStartTime = getCandleStartTime(currentTime);
             const candlesToSave = [];
             
-            for (const productId in currentCandles) {
-                const candle = currentCandles[productId];
-                candlesToSave.push(candle);
+            for (const productId in candles) {
+                const productCandles = candles[productId];
+                if (productCandles.current) {
+                    candlesToSave.push(productCandles.current);
+                }
+                if (productCandles.previous && productCandles.previous.timestamp !== productCandles.current.timestamp) {
+                    candlesToSave.push(productCandles.previous);
+                }
                 
-                if (candle.timestamp !== candleStartTime) {
-                    currentCandles[productId] = {
+                if (productCandles.current.timestamp !== candleStartTime) {
+                    productCandles.previous = productCandles.current;
+                    productCandles.current = {
                         product_id: productId,
                         timestamp: candleStartTime,
-                        open: candle.close,
-                        high: candle.close,
-                        low: candle.close,
-                        close: candle.close,
+                        open: productCandles.current.close,
+                        high: productCandles.current.close,
+                        low: productCandles.current.close,
+                        close: productCandles.current.close,
                         volume: 0
                     };
                 }
@@ -208,7 +221,9 @@ process.on('SIGINT', async () => {
     console.log('프로그램을 종료합니다...');
     ws.close();
 
-    const candlesToSave = Object.values(currentCandles);
+    const candlesToSave = Object.values(candles).flatMap(productCandles => 
+        [productCandles.current, productCandles.previous].filter(Boolean)
+    );
     if (candlesToSave.length > 0) {
         try {
             await bulkSaveCandles(candlesToSave);
