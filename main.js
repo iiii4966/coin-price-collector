@@ -44,14 +44,14 @@ function connectToDatabase() {
 async function createTable() {
     return new Promise((resolve, reject) => {
         const sql = `CREATE TABLE IF NOT EXISTS candles (
-            product_id TEXT,
+            code TEXT,
             timestamp INTEGER,
             open REAL,
             high REAL,
             low REAL,
             close REAL,
             volume REAL,
-            PRIMARY KEY (product_id, timestamp)
+            PRIMARY KEY (code, timestamp)
         )`;
         db.run(sql, (err) => {
             if (err) {
@@ -129,21 +129,21 @@ function updateCandle(trade) {
     const candleStartTime = getCandleStartTime(tradeTime);
     const price = parseFloat(trade.price);
     const size = parseFloat(trade.size);
-    const productId = trade.product_id;
+    const code = trade.product_id;
 
-    if (!candles[productId]) {
-        candles[productId] = {
+    if (!candles[code]) {
+        candles[code] = {
             current: null,
             previous: null
         };
     }
 
-    if (!candles[productId].current || candles[productId].current.timestamp !== candleStartTime) {
-        if (candles[productId].current) {
-            candles[productId].previous = candles[productId].current;
+    if (!candles[code].current || candles[code].current.timestamp !== candleStartTime) {
+        if (candles[code].current) {
+            candles[code].previous = candles[code].current;
         }
-        candles[productId].current = {
-            product_id: productId,
+        candles[code].current = {
+            code: code,
             timestamp: candleStartTime,
             open: price,
             high: price,
@@ -152,7 +152,7 @@ function updateCandle(trade) {
             volume: size
         };
     } else {
-        const candle = candles[productId].current;
+        const candle = candles[code].current;
         candle.high = Math.max(candle.high, price);
         candle.low = Math.min(candle.low, price);
         candle.close = price;
@@ -162,7 +162,7 @@ function updateCandle(trade) {
 
 function bulkSaveCandles(candles) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
+        const sql = `INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close, volume) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         db.serialize(() => {
@@ -170,7 +170,7 @@ function bulkSaveCandles(candles) {
 
             const stmt = db.prepare(sql);
             for (const candle of candles) {
-                stmt.run(candle.product_id, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume);
+                stmt.run(candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume);
             }
             stmt.finalize();
 
@@ -199,8 +199,8 @@ async function main() {
             const candleStartTime = getCandleStartTime(currentTime);
             const candlesToSave = [];
 
-            for (const productId in candles) {
-                const productCandles = candles[productId];
+            for (const code in candles) {
+                const productCandles = candles[code];
                 if (productCandles.current) {
                     candlesToSave.push(productCandles.current);
                 }
@@ -211,7 +211,7 @@ async function main() {
                 if (productCandles.current.timestamp !== candleStartTime) {
                     productCandles.previous = productCandles.current;
                     productCandles.current = {
-                        product_id: productId,
+                        code: code,
                         timestamp: candleStartTime,
                         open: productCandles.current.close,
                         high: productCandles.current.close,
