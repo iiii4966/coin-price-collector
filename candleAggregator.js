@@ -59,19 +59,15 @@ async function aggregateCandles(interval) {
         const sql = `
             SELECT product_id, 
                    timestamp / (? * 60) * (? * 60) as interval_start,
-                   MIN(timestamp) as first_timestamp,
-                   MAX(timestamp) as last_timestamp,
-                   MIN(open) as open,
-                   MAX(high) as high,
-                   MIN(low) as low,
-                   MAX(close) as close,
-                   SUM(volume) as volume
+                   open as open,
+                   high as high,
+                   low as low,
+                   close as close,
+                   volume as volume
             FROM candles
             WHERE timestamp >= ? AND timestamp < ?
-            GROUP BY product_id, interval_start
-            ORDER BY product_id, interval_start
         `;
-
+        console.log(sql, [interval, interval, new Date(startTime * 1000), currentTime])
         db.all(sql, [interval, interval, startTime, currentTime], (err, rows) => {
             if (err) {
                 console.error(`${interval}분 캔들 집계 오류:`, err.message);
@@ -98,7 +94,7 @@ async function saveAggregatedCandles(interval, candles) {
         const sql = `INSERT OR REPLACE INTO candles_${interval} 
                      (product_id, timestamp, open, high, low, close, volume) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        
+
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
 
