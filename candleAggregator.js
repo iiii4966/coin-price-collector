@@ -67,6 +67,7 @@ async function aggregateCandles(interval) {
             FROM candles
             WHERE timestamp >= ? AND timestamp < ?
         `;
+        
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
                 console.error(`${interval}분 캔들 집계 오류:`, err.message);
