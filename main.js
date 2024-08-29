@@ -88,7 +88,7 @@ function initializeWebSocket(productIds) {
 
     ws.on('close', () => {
         console.log('Coinbase WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
-        setTimeout(() => initializeWebSocket(productIds));
+        reconnectWithBackoff(productIds);
     });
 
     ws.on('error', (error) => {
@@ -101,6 +101,27 @@ function initializeWebSocket(productIds) {
             updateCandle(message);
         }
     });
+}
+
+function reconnectWithBackoff(productIds, attempt = 1) {
+    const timeouts = [2, 4, 8, 16, 32, 60];
+    const timeout = timeouts[Math.min(attempt - 1, timeouts.length - 1)] * 1000;
+
+    console.log(`재연결 시도 ${attempt}, ${timeout / 1000}초 후 시도합니다.`);
+
+    setTimeout(() => {
+        try {
+            initializeWebSocket(productIds);
+        } catch (error) {
+            console.error('재연결 실패:', error);
+            if (attempt < timeouts.length) {
+                reconnectWithBackoff(productIds, attempt + 1);
+            } else {
+                console.error('최대 재시도 횟수를 초과했습니다. 프로그램을 종료합니다.');
+                process.exit(1);
+            }
+        }
+    }, timeout);
 }
 
 function updateCandle(trade) {
