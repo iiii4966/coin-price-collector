@@ -2,8 +2,8 @@ const WebSocket = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 
-const CANDLE_INTERVAL = 60; // 1분 캔들
-const SAVE_INTERVAL = 5; // 5초마다 저장
+const CANDLE_INTERVAL = 60; // 1-minute candles
+const SAVE_INTERVAL = 5; // Save every 5 seconds
 
 let ws;
 let candles = {};
@@ -19,10 +19,10 @@ async function getCoinbaseProducts() {
             (product.status === 'online' || product.status === 'offline')
         );
 
-        console.log(`필터링된 상품 수: ${filteredProducts.length}`);
+        console.log(`Number of filtered products: ${filteredProducts.length}`);
         return filteredProducts.map(product => product.id);
     } catch (error) {
-        console.error('API 요청 중 오류 발생:', error.message);
+        console.error('Error occurred during API request:', error.message);
         return [];
     }
 }
@@ -31,10 +31,10 @@ function connectToDatabase() {
     return new Promise((resolve, reject) => {
         db = new sqlite3.Database('candles.db', (err) => {
             if (err) {
-                console.error('데이터베이스 연결 오류:', err.message);
+                console.error('Database connection error:', err.message);
                 reject(err);
             } else {
-                console.log('데이터베이스에 연결되었습니다.');
+                console.log('Connected to the database.');
                 resolve(db);
             }
         });
@@ -55,10 +55,10 @@ async function createTable() {
         )`;
         db.run(sql, (err) => {
             if (err) {
-                console.error('테이블 생성 오류:', err.message);
+                console.error('Table creation error:', err.message);
                 reject(err);
             } else {
-                console.log('candles 테이블이 생성되었습니다.');
+                console.log('Candles table has been created.');
                 resolve();
             }
         });
@@ -77,7 +77,7 @@ function initializeWebSocket(productIds) {
     ws = new WebSocket('wss://ws-feed.exchange.coinbase.com');
 
     ws.on('open', () => {
-        console.log('Coinbase WebSocket에 연결되었습니다.');
+        console.log('Connected to Coinbase WebSocket.');
         const subscribeMessage = {
             type: 'subscribe',
             product_ids: productIds,
@@ -87,12 +87,12 @@ function initializeWebSocket(productIds) {
     });
 
     ws.on('close', () => {
-        console.log('Coinbase WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
+        console.log('Coinbase WebSocket connection closed. Attempting to reconnect...');
         reconnectWithBackoff(productIds);
     });
 
     ws.on('error', (error) => {
-        console.error('WebSocket 오류:', error);
+        console.error('WebSocket error:', error);
     });
 
     ws.on('message', (data) => {
@@ -107,17 +107,17 @@ function reconnectWithBackoff(productIds, attempt = 1) {
     const timeouts = [0, 2, 4, 8, 16, 32, 60];
     const timeout = timeouts[Math.min(attempt - 1, timeouts.length - 1)] * 1000;
 
-    console.log(`재연결 시도 ${attempt}, ${timeout / 1000}초 후 시도합니다.`);
+    console.log(`Reconnection attempt ${attempt}, trying again in ${timeout / 1000} seconds.`);
 
     setTimeout(() => {
         try {
             initializeWebSocket(productIds);
         } catch (error) {
-            console.error('재연결 실패:', error);
+            console.error('Reconnection failed:', error);
             if (attempt < timeouts.length) {
                 reconnectWithBackoff(productIds, attempt + 1);
             } else {
-                console.error('최대 재시도 횟수를 초과했습니다. 프로그램을 종료합니다.');
+                console.error('Maximum retry attempts exceeded. Exiting the program.');
                 process.exit(1);
             }
         }
@@ -176,7 +176,7 @@ function bulkSaveCandles(candles) {
 
             db.run('COMMIT', (err) => {
                 if (err) {
-                    console.error('Bulk 저장 오류:', err.message);
+                    console.error('Bulk save error:', err.message);
                     db.run('ROLLBACK');
                     reject(err);
                 } else {
@@ -224,14 +224,14 @@ async function main() {
 
             try {
                 await bulkSaveCandles(candlesToSave);
-                console.log(`${candlesToSave.length}개의 종목 캔들 데이터가 저장되었습니다.`);
+                console.log(`${candlesToSave.length} product candle data have been saved.`);
             } catch (error) {
-                console.error('캔들 데이터 저장 중 오류 발생:', error);
+                console.error('Error occurred while saving candle data:', error);
             }
         }, SAVE_INTERVAL * 1000);
 
     } catch (error) {
-        console.error('초기화 중 오류 발생:', error);
+        console.error('Error occurred during initialization:', error);
         process.exit(1);
     }
 }
@@ -239,7 +239,7 @@ async function main() {
 main();
 
 process.on('SIGINT', async () => {
-    console.log('프로그램을 종료합니다...');
+    console.log('Terminating the program...');
     ws.close();
 
     const candlesToSave = Object.values(candles).flatMap(productCandles =>
@@ -248,17 +248,17 @@ process.on('SIGINT', async () => {
     if (candlesToSave.length > 0) {
         try {
             await bulkSaveCandles(candlesToSave);
-            console.log(`${candlesToSave.length}개의 종목 캔들 데이터가 저장되었습니다.`);
+            console.log(`${candlesToSave.length} product candle data have been saved.`);
         } catch (error) {
-            console.error('종료 시 캔들 데이터 저장 중 오류 발생:', error);
+            console.error('Error occurred while saving candle data during shutdown:', error);
         }
     }
 
     db.close((err) => {
         if (err) {
-            console.error('데이터베이스 종료 오류:', err.message);
+            console.error('Database closure error:', err.message);
         } else {
-            console.log('데이터베이스 연결이 안전하게 종료되었습니다.');
+            console.log('Database connection has been safely closed.');
         }
         process.exit();
     });
