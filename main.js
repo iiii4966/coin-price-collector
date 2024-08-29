@@ -14,8 +14,8 @@ async function getCoinbaseProducts() {
         const response = await axios.get('https://api.exchange.coinbase.com/products');
         const products = response.data;
 
-        const filteredProducts = products.filter(product => 
-            product.quote_currency === 'USD' && 
+        const filteredProducts = products.filter(product =>
+            product.quote_currency === 'USD' &&
             (product.status === 'online' || product.status === 'offline')
         );
 
@@ -88,7 +88,7 @@ function initializeWebSocket(productIds) {
 
     ws.on('close', () => {
         console.log('Coinbase WebSocket 연결이 닫혔습니다. 재연결 시도 중...');
-        setTimeout(() => initializeWebSocket(productIds), 5000);
+        setTimeout(() => initializeWebSocket(productIds));
     });
 
     ws.on('error', (error) => {
@@ -143,7 +143,7 @@ function bulkSaveCandles(candles) {
     return new Promise((resolve, reject) => {
         const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        
+
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
 
@@ -177,7 +177,7 @@ async function main() {
             const currentTime = getCurrentTimestamp();
             const candleStartTime = getCandleStartTime(currentTime);
             const candlesToSave = [];
-            
+
             for (const productId in candles) {
                 const productCandles = candles[productId];
                 if (productCandles.current) {
@@ -186,7 +186,7 @@ async function main() {
                 if (productCandles.previous && productCandles.previous.timestamp !== productCandles.current.timestamp) {
                     candlesToSave.push(productCandles.previous);
                 }
-                
+
                 if (productCandles.current.timestamp !== candleStartTime) {
                     productCandles.previous = productCandles.current;
                     productCandles.current = {
@@ -200,7 +200,7 @@ async function main() {
                     };
                 }
             }
-            
+
             try {
                 await bulkSaveCandles(candlesToSave);
                 console.log(`${candlesToSave.length}개의 종목 캔들 데이터가 저장되었습니다.`);
@@ -221,7 +221,7 @@ process.on('SIGINT', async () => {
     console.log('프로그램을 종료합니다...');
     ws.close();
 
-    const candlesToSave = Object.values(candles).flatMap(productCandles => 
+    const candlesToSave = Object.values(candles).flatMap(productCandles =>
         [productCandles.current, productCandles.previous].filter(Boolean)
     );
     if (candlesToSave.length > 0) {
