@@ -104,8 +104,8 @@ function initializeWebSocket(productIds) {
 }
 
 function updateCandle(trade) {
-    const currentTime = getCurrentTimestamp();
-    const candleStartTime = getCandleStartTime(currentTime);
+    const tradeTime = new Date(trade.time).getTime() / 1000;
+    const candleStartTime = getCandleStartTime(tradeTime);
     const price = parseFloat(trade.price);
     const size = parseFloat(trade.size);
     const productId = trade.product_id;
