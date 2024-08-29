@@ -104,7 +104,7 @@ function initializeWebSocket(productIds) {
 }
 
 function reconnectWithBackoff(productIds, attempt = 1) {
-    const timeouts = [2, 4, 8, 16, 32, 60];
+    const timeouts = [0, 2, 4, 8, 16, 32, 60];
     const timeout = timeouts[Math.min(attempt - 1, timeouts.length - 1)] * 1000;
 
     console.log(`재연결 시도 ${attempt}, ${timeout / 1000}초 후 시도합니다.`);
