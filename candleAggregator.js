@@ -59,12 +59,16 @@ async function aggregateCandles(interval) {
         const sql = `
             SELECT product_id, 
                    MIN(timestamp) as timestamp,
-                   FIRST_VALUE(open) as open,
+                   (SELECT open FROM candles c2 
+                    WHERE c2.product_id = c1.product_id 
+                    AND c2.timestamp = MIN(c1.timestamp)) as open,
                    MAX(high) as high,
                    MIN(low) as low,
-                   LAST_VALUE(close) as close,
+                   (SELECT close FROM candles c2 
+                    WHERE c2.product_id = c1.product_id 
+                    AND c2.timestamp = MAX(c1.timestamp)) as close,
                    SUM(volume) as volume
-            FROM candles
+            FROM candles c1
             WHERE timestamp >= ? AND timestamp < ?
             GROUP BY product_id, timestamp / (? * 60)
         `;
