@@ -132,15 +132,30 @@ function updateCandle(trade) {
     }
 }
 
-function saveCandle(candle) {
-    const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    const values = [candle.product_id, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume];
+function bulkSaveCandles(candles) {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
 
-    db.run(sql, values, (err) => {
-        if (err) {
-            console.error('캔들 저장 오류:', err.message);
-        }
+            const stmt = db.prepare(sql);
+            for (const candle of candles) {
+                stmt.run(candle.product_id, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume);
+            }
+            stmt.finalize();
+
+            db.run('COMMIT', (err) => {
+                if (err) {
+                    console.error('Bulk 저장 오류:', err.message);
+                    db.run('ROLLBACK');
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
+        });
     });
 }
 
@@ -151,15 +166,16 @@ async function main() {
         const productIds = await getCoinbaseProducts();
         initializeWebSocket(productIds);
 
-        setInterval(() => {
+        setInterval(async () => {
             const currentTime = getCurrentTimestamp();
             const candleStartTime = getCandleStartTime(currentTime);
-            let savedCount = 0;
+            const candlesToSave = [];
             
             for (const productId in currentCandles) {
                 const candle = currentCandles[productId];
+                candlesToSave.push(candle);
+                
                 if (candle.timestamp !== candleStartTime) {
-                    saveCandle(candle);
                     currentCandles[productId] = {
                         product_id: productId,
                         timestamp: candleStartTime,
@@ -169,12 +185,15 @@ async function main() {
                         close: candle.close,
                         volume: 0
                     };
-                } else {
-                    saveCandle(candle);
                 }
-                savedCount++;
             }
-            console.log(`${savedCount}개의 종목 캔들 데이터가 저장되었습니다.`);
+            
+            try {
+                await bulkSaveCandles(candlesToSave);
+                console.log(`${candlesToSave.length}개의 종목 캔들 데이터가 저장되었습니다.`);
+            } catch (error) {
+                console.error('캔들 데이터 저장 중 오류 발생:', error);
+            }
         }, SAVE_INTERVAL * 1000);
 
     } catch (error) {
