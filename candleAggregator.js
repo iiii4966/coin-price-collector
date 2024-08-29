@@ -58,31 +58,42 @@ async function aggregateCandles(interval) {
     return new Promise((resolve, reject) => {
         const sql = `
             SELECT product_id, 
-                   timestamp / (? * 60) * (? * 60) as interval_start,
-                   open as open,
-                   high as high,
-                   low as low,
-                   close as close,
-                   volume as volume
+                   timestamp,
+                   open,
+                   high,
+                   low,
+                   close,
+                   volume
             FROM candles
             WHERE timestamp >= ? AND timestamp < ?
         `;
-        console.log(sql, [interval, interval, new Date(startTime * 1000), currentTime])
-        db.all(sql, [interval, interval, startTime, currentTime], (err, rows) => {
+        db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
                 console.error(`${interval}분 캔들 집계 오류:`, err.message);
                 reject(err);
             } else {
-                // 추가 처리: 각 그룹의 첫 번째와 마지막 캔들에서 open과 close 값을 가져옵니다.
-                const processedRows = rows.map(row => ({
-                    product_id: row.product_id,
-                    timestamp: row.interval_start,
-                    open: row.open,
-                    high: row.high,
-                    low: row.low,
-                    close: row.close,
-                    volume: row.volume
-                }));
+                const groupedCandles = {};
+                rows.forEach(row => {
+                    const intervalStart = Math.floor(row.timestamp / (interval * 60)) * (interval * 60);
+                    const key = `${row.product_id}-${intervalStart}`;
+                    if (!groupedCandles[key]) {
+                        groupedCandles[key] = {
+                            product_id: row.product_id,
+                            timestamp: intervalStart,
+                            open: row.open,
+                            high: row.high,
+                            low: row.low,
+                            close: row.close,
+                            volume: row.volume
+                        };
+                    } else {
+                        groupedCandles[key].high = Math.max(groupedCandles[key].high, row.high);
+                        groupedCandles[key].low = Math.min(groupedCandles[key].low, row.low);
+                        groupedCandles[key].close = row.close;
+                        groupedCandles[key].volume += row.volume;
+                    }
+                });
+                const processedRows = Object.values(groupedCandles);
                 resolve(processedRows);
             }
         });
