@@ -132,7 +132,7 @@ function updateCandle(trade) {
     }
 }
 
-function saveCandle(candle, isComplete = false) {
+function saveCandle(candle) {
     const sql = `INSERT OR REPLACE INTO candles (product_id, timestamp, open, high, low, close, volume) 
                  VALUES (?, ?, ?, ?, ?, ?, ?)`;
     const values = [candle.product_id, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume];
@@ -140,8 +140,6 @@ function saveCandle(candle, isComplete = false) {
     db.run(sql, values, (err) => {
         if (err) {
             console.error('캔들 저장 오류:', err.message);
-        } else {
-            console.log(`캔들 ${isComplete ? '완료' : '중간'} 저장: ${candle.product_id} - ${new Date(candle.timestamp * 1000)}`);
         }
     });
 }
@@ -156,11 +154,12 @@ async function main() {
         setInterval(() => {
             const currentTime = getCurrentTimestamp();
             const candleStartTime = getCandleStartTime(currentTime);
+            let savedCount = 0;
             
             for (const productId in currentCandles) {
                 const candle = currentCandles[productId];
                 if (candle.timestamp !== candleStartTime) {
-                    saveCandle(candle, true);
+                    saveCandle(candle);
                     currentCandles[productId] = {
                         product_id: productId,
                         timestamp: candleStartTime,
@@ -171,9 +170,11 @@ async function main() {
                         volume: 0
                     };
                 } else {
-                    saveCandle(candle, false);
+                    saveCandle(candle);
                 }
+                savedCount++;
             }
+            console.log(`${savedCount}개의 종목 캔들 데이터가 저장되었습니다.`);
         }, SAVE_INTERVAL * 1000);
 
     } catch (error) {
