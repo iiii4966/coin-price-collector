@@ -61,11 +61,9 @@ function getStartTime(timestamp, interval) {
 
 async function aggregateCandles(interval) {
     const currentTime = Math.floor(Date.now() / 1000);
-    const startTime = interval === 240
-        ? getStartTime(currentTime, interval) - 4 * 60 * 60
-        : getStartTime(currentTime, interval) - interval * 60;
+    const startTime = getStartTime(currentTime, interval) - interval * 60;
 
-    const baseTables = interval === 240 ? 'candles_10' : 'candles'
+    const baseTables = interval === 240 ? 'candles_60' : 'candles'
 
     return new Promise((resolve, reject) => {
         const sql = `
@@ -80,7 +78,7 @@ async function aggregateCandles(interval) {
             WHERE tms >= ? AND tms < ? AND code = 'BTC-USD'
         `;
 
-        console.log( new Date(startTime * 1000), new Date(currentTime * 1000))
+        console.log(`Aggregating ${interval}-minute candles from ${new Date(startTime * 1000)} to ${new Date(currentTime * 1000)}`);
 
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
