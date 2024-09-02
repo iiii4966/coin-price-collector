@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
-const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
+const { connectToDatabase, createTables } = require('./dbUtils');
 
 const CANDLE_INTERVAL = 60; // 1-minute candles
 const SAVE_INTERVAL = 5; // Save every 5 seconds
@@ -25,44 +25,6 @@ async function getCoinbaseProducts() {
         console.error('Error occurred during API request:', error.message);
         return [];
     }
-}
-
-function connectToDatabase() {
-    return new Promise((resolve, reject) => {
-        db = new sqlite3.Database('candles.db', (err) => {
-            if (err) {
-                console.error('Database connection error:', err.message);
-                reject(err);
-            } else {
-                console.log('Connected to the database.');
-                resolve(db);
-            }
-        });
-    });
-}
-
-async function createTable() {
-    return new Promise((resolve, reject) => {
-        const sql = `CREATE TABLE IF NOT EXISTS candles (
-            code TEXT,
-            tms INTEGER,
-            op REAL,
-            hp REAL,
-            lp REAL,
-            cp REAL,
-            tv REAL,
-            PRIMARY KEY (code, tms)
-        )`;
-        db.run(sql, (err) => {
-            if (err) {
-                console.error('Table creation error:', err.message);
-                reject(err);
-            } else {
-                console.log('Candles table has been created.');
-                resolve();
-            }
-        });
-    });
 }
 
 function getCurrentTimestamp() {
@@ -190,8 +152,8 @@ function bulkSaveCandles(candles) {
 
 async function main() {
     try {
-        await connectToDatabase();
-        await createTable();
+        db = await connectToDatabase();
+        await createTables(db);
         const productIds = await getCoinbaseProducts();
         initializeWebSocket(productIds);
 
