@@ -78,7 +78,11 @@ async function aggregateCandles(interval) {
             WHERE tms >= ? AND tms < ? AND code = 'BTC-USD'
         `;
 
-        console.log(`Aggregating ${interval}-minute candles from ${new Date(startTime * 1000)} to ${new Date(currentTime * 1000)}`);
+        const formatTime = (timestamp) => {
+            const date = new Date(timestamp * 1000);
+            return date.toISOString().replace('T', ' ').substr(0, 19) + ' UTC';
+        };
+        console.log(`Aggregating ${interval}-minute candles from ${formatTime(startTime)} to ${formatTime(currentTime)}`);
 
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
