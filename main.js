@@ -45,13 +45,13 @@ async function createTable() {
     return new Promise((resolve, reject) => {
         const sql = `CREATE TABLE IF NOT EXISTS candles (
             code TEXT,
-            timestamp INTEGER,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume REAL,
-            PRIMARY KEY (code, timestamp)
+            tms INTEGER,
+            op REAL,
+            hp REAL,
+            lp REAL,
+            cp REAL,
+            tv REAL,
+            PRIMARY KEY (code, tms)
         )`;
         db.run(sql, (err) => {
             if (err) {
@@ -141,6 +141,7 @@ function updateCandle(trade) {
     if (!candles[code].current || candles[code].current.timestamp !== candleStartTime) {
         if (candles[code].current) {
             candles[code].previous = candles[code].current;
+            candles[code].previous.inserted = false;
         }
         candles[code].current = {
             code: code,
@@ -162,7 +163,7 @@ function updateCandle(trade) {
 
 function bulkSaveCandles(candles) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles (code, timestamp, open, high, low, close, volume) 
+        const sql = `INSERT OR REPLACE INTO candles (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         db.serialize(() => {
@@ -200,23 +201,31 @@ async function main() {
             const candlesToSave = [];
 
             for (const code in candles) {
-                const productCandles = candles[code];
-                if (productCandles.current) {
-                    candlesToSave.push(productCandles.current);
-                }
-                if (productCandles.previous && productCandles.previous.timestamp !== productCandles.current.timestamp) {
-                    candlesToSave.push(productCandles.previous);
+                const candle = candles[code];
+
+                if (candle.current && candle.current.volume !== 0) {
+                    candlesToSave.push(candle.current);
                 }
 
-                if (productCandles.current.timestamp !== candleStartTime) {
-                    productCandles.previous = productCandles.current;
-                    productCandles.current = {
+                if (candle.previous &&
+                    candle.previous.timestamp !== candle.current.timestamp &&
+                    candle.previous.volume !== 0 &&
+                    !candle.previous.inserted
+                ) {
+                    candlesToSave.push(candle.previous);
+                    candle.previous.inserted = true;
+                }
+
+                if (candle.current.timestamp !== candleStartTime) {
+                    candle.previous = candle.current
+                    candle.previous.inserted = false;
+                    candle.current = {
                         code: code,
                         timestamp: candleStartTime,
-                        open: productCandles.current.close,
-                        high: productCandles.current.close,
-                        low: productCandles.current.close,
-                        close: productCandles.current.close,
+                        open: candle.current.close,
+                        high: candle.current.close,
+                        low: candle.current.close,
+                        close: candle.current.close,
                         volume: 0
                     };
                 }
@@ -224,7 +233,8 @@ async function main() {
 
             try {
                 await bulkSaveCandles(candlesToSave);
-                console.log(`${candlesToSave.length} product candle data have been saved.`);
+                console.log(`${candlesToSave.length} candle saved.`);
+                console.log(`${Object.keys(candles).length} code collected.`);
             } catch (error) {
                 console.error('Error occurred while saving candle data:', error);
             }
