@@ -23,14 +23,14 @@ async function createTables() {
     const promises = CANDLE_INTERVALS.map(interval => {
         return new Promise((resolve, reject) => {
             const sql = `CREATE TABLE IF NOT EXISTS candles_${interval} (
-                product_id TEXT,
-                timestamp INTEGER,
-                open REAL,
-                high REAL,
-                low REAL,
-                close REAL,
-                volume REAL,
-                PRIMARY KEY (product_id, timestamp)
+                code TEXT,
+                tms INTEGER,
+                op REAL,
+                hp REAL,
+                lp REAL,
+                cp REAL,
+                tv REAL,
+                PRIMARY KEY (code, tms)
             )`;
             db.run(sql, (err) => {
                 if (err) {
@@ -61,23 +61,27 @@ function getStartTime(timestamp, interval) {
 
 async function aggregateCandles(interval) {
     const currentTime = Math.floor(Date.now() / 1000);
-    const startTime = interval === 240 
-        ? getStartTime(currentTime, interval) - 4 * 60 * 60 
+    const startTime = interval === 240
+        ? getStartTime(currentTime, interval) - 4 * 60 * 60
         : getStartTime(currentTime, interval) - interval * 60;
+
+    const baseTables = interval === 240 ? 'candles_10' : 'candles'
 
     return new Promise((resolve, reject) => {
         const sql = `
-            SELECT product_id, 
-                   timestamp,
-                   open,
-                   high,
-                   low,
-                   close,
-                   volume
-            FROM candles
-            WHERE timestamp >= ? AND timestamp < ?
+            SELECT code, 
+                   tms,
+                   op,
+                   hp,
+                   lp,
+                   cp,
+                   tv
+            FROM ${baseTables}
+            WHERE tms >= ? AND tms < ? AND code = 'BTC-USD'
         `;
-        
+
+        console.log( new Date(startTime * 1000), new Date(currentTime * 1000))
+
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
                 console.error(`${interval}분 캔들 집계 오류:`, err.message);
@@ -85,23 +89,23 @@ async function aggregateCandles(interval) {
             } else {
                 const groupedCandles = {};
                 rows.forEach(row => {
-                    const intervalStart = Math.floor(row.timestamp / (interval * 60)) * (interval * 60);
-                    const key = `${row.product_id}-${intervalStart}`;
+                    const intervalStart = Math.floor(row.tms / (interval * 60)) * (interval * 60);
+                    const key = `${row.code}-${intervalStart}`;
                     if (!groupedCandles[key]) {
                         groupedCandles[key] = {
-                            product_id: row.product_id,
-                            timestamp: intervalStart,
-                            open: row.open,
-                            high: row.high,
-                            low: row.low,
-                            close: row.close,
-                            volume: row.volume
+                            code: row.code,
+                            tms: intervalStart,
+                            op: row.op,
+                            hp: row.hp,
+                            lp: row.lp,
+                            cp: row.cp,
+                            tv: row.tv
                         };
                     } else {
-                        groupedCandles[key].high = Math.max(groupedCandles[key].high, row.high);
-                        groupedCandles[key].low = Math.min(groupedCandles[key].low, row.low);
-                        groupedCandles[key].close = row.close;
-                        groupedCandles[key].volume += row.volume;
+                        groupedCandles[key].hp = Math.max(groupedCandles[key].hp, row.hp);
+                        groupedCandles[key].lp = Math.min(groupedCandles[key].lp, row.lp);
+                        groupedCandles[key].cp = row.cp;
+                        groupedCandles[key].tv += row.tv;
                     }
                 });
                 const processedRows = Object.values(groupedCandles);
@@ -114,7 +118,7 @@ async function aggregateCandles(interval) {
 async function saveAggregatedCandles(interval, candles) {
     return new Promise((resolve, reject) => {
         const sql = `INSERT OR REPLACE INTO candles_${interval} 
-                     (product_id, timestamp, open, high, low, close, volume) 
+                     (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         db.serialize(() => {
@@ -123,13 +127,13 @@ async function saveAggregatedCandles(interval, candles) {
             const stmt = db.prepare(sql);
             for (const candle of candles) {
                 stmt.run(
-                    candle.product_id,
-                    candle.timestamp,
-                    candle.open,
-                    candle.high,
-                    candle.low,
-                    candle.close,
-                    candle.volume
+                    candle.code,
+                    candle.tms,
+                    candle.op,
+                    candle.hp,
+                    candle.lp,
+                    candle.cp,
+                    candle.tv
                 );
             }
             stmt.finalize();
