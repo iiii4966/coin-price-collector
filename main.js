@@ -145,19 +145,19 @@ function updateCandle(trade) {
         }
         candles[code].current = {
             code: code,
-            timestamp: candleStartTime,
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume: size
+            tms: candleStartTime,
+            op: price,
+            hp: price,
+            lp: price,
+            cp: price,
+            tv: size
         };
     } else {
         const candle = candles[code].current;
-        candle.high = Math.max(candle.high, price);
-        candle.low = Math.min(candle.low, price);
-        candle.close = price;
-        candle.volume += size;
+        candle.hp = Math.max(candle.hp, price);
+        candle.lp = Math.min(candle.lp, price);
+        candle.cp = price;
+        candle.tv += size;
     }
 }
 
@@ -171,7 +171,7 @@ function bulkSaveCandles(candles) {
 
             const stmt = db.prepare(sql);
             for (const candle of candles) {
-                stmt.run(candle.code, candle.timestamp, candle.open, candle.high, candle.low, candle.close, candle.volume);
+                stmt.run(candle.code, candle.tms, candle.op, candle.hp, candle.lp, candle.cp, candle.tv);
             }
             stmt.finalize();
 
@@ -203,30 +203,30 @@ async function main() {
             for (const code in candles) {
                 const candle = candles[code];
 
-                if (candle.current && candle.current.volume !== 0) {
+                if (candle.current && candle.current.tv !== 0) {
                     candlesToSave.push(candle.current);
                 }
 
                 if (candle.previous &&
-                    candle.previous.timestamp !== candle.current.timestamp &&
-                    candle.previous.volume !== 0 &&
+                    candle.previous.tms !== candle.current.tms &&
+                    candle.previous.tv !== 0 &&
                     !candle.previous.inserted
                 ) {
                     candlesToSave.push(candle.previous);
                     candle.previous.inserted = true;
                 }
 
-                if (candle.current.timestamp !== candleStartTime) {
+                if (candle.current.tms !== candleStartTime) {
                     candle.previous = candle.current
                     candle.previous.inserted = false;
                     candle.current = {
                         code: code,
-                        timestamp: candleStartTime,
-                        open: candle.current.close,
-                        high: candle.current.close,
-                        low: candle.current.close,
-                        close: candle.current.close,
-                        volume: 0
+                        tms: candleStartTime,
+                        op: candle.current.cp,
+                        hp: candle.current.cp,
+                        lp: candle.current.cp,
+                        cp: candle.current.cp,
+                        tv: 0
                     };
                 }
             }
