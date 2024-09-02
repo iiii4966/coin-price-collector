@@ -79,8 +79,13 @@ async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
     let end = new Date().toISOString();
 
+    console.log(product)
     while (collectedCandles < MAX_CANDLES) {
+        // console.log(end);
+
         const candles = await fetchCandles(product.id, granularity, end);
+        console.log(candles[0][0]);
+        console.log(candles[candles.length - 1][0]);
 
         if (candles.length === 0 || candles.length < CANDLES_PER_REQUEST) {
             await saveCandles(product.id, candles, granularity);
@@ -90,8 +95,8 @@ async function collectHistoricalCandles(product, granularity) {
 
         await saveCandles(product.id, candles, granularity);
         collectedCandles += candles.length;
-        end = new Date(candles[candles.length - 1][0] * 1000).toISOString();
-
+        end = new Date(candles[candles.length -1][0] * 1000);
+        console.log('end', candles[candles.length - 1][0])
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
     }
