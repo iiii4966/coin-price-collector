@@ -1,6 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 
-const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240, 1440, 10080];
+const CANDLE_INTERVALS = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080];
 const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 
 let db;
@@ -74,7 +74,7 @@ async function aggregateCandles(interval) {
     const currentTime = Math.floor(Date.now() / 1000);
     const startTime = getStartTime(currentTime, interval) - interval * 60;
 
-    const baseTables = interval === 240 || interval === 1440 ? 'candles_60' : 
+    const baseTables = interval === 240 || interval === 1440 ? 'candles_60' :
                        interval === 10080 ? 'candles_1440' : 'candles'
 
     return new Promise((resolve, reject) => {

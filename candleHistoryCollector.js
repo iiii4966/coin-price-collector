@@ -2,8 +2,8 @@ const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
-const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240, 1440, 10080];
-const GRANULARITIES = [60, 300, 900, 3600]; // 1분, 5분, 15분, 1시간
+const CANDLE_INTERVALS = [1, 3, 5, 10, 15, 30, 60, 240, 1440, 10080];
+const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
 const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
@@ -55,8 +55,8 @@ async function createTables() {
 async function getUSDProducts() {
     try {
         const response = await axios.get(`${BASE_URL}/products`);
-        return response.data.filter(product => 
-            product.quote_currency === 'USD' && 
+        return response.data.filter(product =>
+            product.quote_currency === 'USD' &&
             (product.status === 'online' || product.status === 'offline')
         );
     } catch (error) {
@@ -110,7 +110,7 @@ async function collectHistoricalCandles(product, granularity) {
 
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
-        
+
         if (candles.length === 0 || candles.length < CANDLES_PER_REQUEST) {
             await saveCandles(product.id, candles, granularity);
             console.log(`${product.id} - ${granularity}초 캔들 수집 완료: ${collectedCandles + candles.length}개`);
