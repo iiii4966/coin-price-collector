@@ -3,7 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240, 1440, 10080];
-const GRANULARITIES = CANDLE_INTERVALS.map(interval => interval * 60); // 초 단위로 변환
+const GRANULARITIES = [60, 300, 900, 3600]; // 1분, 5분, 15분, 1시간
 const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
@@ -104,7 +104,7 @@ async function saveCandles(productId, candles, interval) {
     });
 }
 
-async function collectHistoricalCandles(product, granularity, interval) {
+async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
     let end = new Date().toISOString();
 
@@ -112,12 +112,12 @@ async function collectHistoricalCandles(product, granularity, interval) {
         const candles = await fetchCandles(product.id, granularity, end);
         
         if (candles.length === 0 || candles.length < CANDLES_PER_REQUEST) {
-            await saveCandles(product.id, candles, interval);
-            console.log(`${product.id} - ${interval}분 캔들 수집 완료: ${collectedCandles + candles.length}개`);
+            await saveCandles(product.id, candles, granularity);
+            console.log(`${product.id} - ${granularity}초 캔들 수집 완료: ${collectedCandles + candles.length}개`);
             break;
         }
 
-        await saveCandles(product.id, candles, interval);
+        await saveCandles(product.id, candles, granularity);
         collectedCandles += candles.length;
         end = new Date(candles[candles.length - 1][0] * 1000).toISOString();
 
@@ -135,8 +135,8 @@ async function main() {
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
         for (const product of products) {
-            for (let i = 0; i < GRANULARITIES.length; i++) {
-                await collectHistoricalCandles(product, GRANULARITIES[i], CANDLE_INTERVALS[i]);
+            for (const granularity of GRANULARITIES) {
+                await collectHistoricalCandles(product, granularity);
             }
         }
 
