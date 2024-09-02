@@ -23,31 +23,28 @@ function connectToDatabase() {
     });
 }
 
-async function createTables() {
-    const promises = GRANULARITIES.map(granularity => {
-        return new Promise((resolve, reject) => {
-            const sql = `CREATE TABLE IF NOT EXISTS candles_${granularity} (
-                code TEXT,
-                tms INTEGER,
-                op REAL,
-                hp REAL,
-                lp REAL,
-                cp REAL,
-                tv REAL,
-                PRIMARY KEY (code, tms)
-            )`;
-            db.run(sql, (err) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
+async function createTable() {
+    return new Promise((resolve, reject) => {
+        const sql = `CREATE TABLE IF NOT EXISTS candles (
+            code TEXT,
+            tms INTEGER,
+            op REAL,
+            hp REAL,
+            lp REAL,
+            cp REAL,
+            tv REAL,
+            PRIMARY KEY (code, tms)
+        )`;
+        db.run(sql, (err) => {
+            if (err) {
+                console.error('테이블 생성 오류:', err.message);
+                reject(err);
+            } else {
+                console.log('Candles 테이블이 생성되었습니다.');
+                resolve();
+            }
         });
     });
-
-    await Promise.all(promises);
-    console.log('테이블이 생성되었습니다.');
 }
 
 async function getUSDProducts() {
@@ -76,9 +73,9 @@ async function fetchCandles(productId, granularity, end = new Date().toISOString
     }
 }
 
-async function saveCandles(productId, granularity, candles) {
+async function saveCandles(productId, candles) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles_${granularity} 
+        const sql = `INSERT OR REPLACE INTO candles 
                      (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
@@ -110,12 +107,12 @@ async function collectHistoricalCandles(product, granularity) {
         const candles = await fetchCandles(product.id, granularity, end);
         
         if (candles.length === 0 || candles.length < CANDLES_PER_REQUEST) {
-            await saveCandles(product.id, granularity, candles);
+            await saveCandles(product.id, candles);
             console.log(`${product.id} - ${granularity}초 캔들 수집 완료: ${collectedCandles + candles.length}개`);
             break;
         }
 
-        await saveCandles(product.id, granularity, candles);
+        await saveCandles(product.id, candles);
         collectedCandles += candles.length;
         end = new Date(candles[candles.length - 1][0] * 1000).toISOString();
 
@@ -127,7 +124,7 @@ async function collectHistoricalCandles(product, granularity) {
 async function main() {
     try {
         await connectToDatabase();
-        await createTables();
+        await createTable();
 
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
