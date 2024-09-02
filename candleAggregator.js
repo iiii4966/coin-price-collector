@@ -1,6 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 
-const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240];
+const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240, 1440];
 const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
 
 let db;
@@ -48,9 +48,13 @@ async function createTables() {
 }
 
 function getStartTime(timestamp, interval) {
-    if (interval === 240) {
+    const date = new Date(timestamp * 1000);
+    if (interval === 1440) {
+        // 1일 캔들의 경우 UTC 기준 00:00:00에 맞춤
+        date.setUTCHours(0, 0, 0, 0);
+        return Math.floor(date.getTime() / 1000);
+    } else if (interval === 240) {
         // 4시간 캔들의 경우 UTC 기준 0, 4, 8, 12, 16, 20시에 맞춤
-        const date = new Date(timestamp * 1000);
         const hours = date.getUTCHours();
         const fourHourBlock = Math.floor(hours / 4);
         date.setUTCHours(fourHourBlock * 4, 0, 0, 0);
@@ -63,7 +67,7 @@ async function aggregateCandles(interval) {
     const currentTime = Math.floor(Date.now() / 1000);
     const startTime = getStartTime(currentTime, interval) - interval * 60;
 
-    const baseTables = interval === 240 ? 'candles_60' : 'candles'
+    const baseTables = interval === 240 || interval === 1440 ? 'candles_60' : 'candles'
 
     return new Promise((resolve, reject) => {
         const sql = `
