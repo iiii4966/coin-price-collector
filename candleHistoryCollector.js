@@ -7,6 +7,14 @@ const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
 
+const GRANULARITY_TO_INTERVAL = {
+    60: 1,
+    300: 5,
+    900: 15,
+    3600: 60,
+    86400: 1440
+};
+
 let db;
 
 async function getUSDProducts() {
@@ -35,8 +43,14 @@ async function fetchCandles(productId, granularity, end = new Date().toISOString
     }
 }
 
-async function saveCandles(productId, candles, interval) {
+async function saveCandles(productId, candles, granularity) {
     return new Promise((resolve, reject) => {
+        const interval = GRANULARITY_TO_INTERVAL[granularity];
+        if (!interval) {
+            reject(new Error(`Invalid granularity: ${granularity}`));
+            return;
+        }
+
         const sql = `INSERT OR REPLACE INTO candles_${interval} 
                      (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
