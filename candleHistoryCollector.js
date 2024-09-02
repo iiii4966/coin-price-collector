@@ -2,7 +2,8 @@ const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
-const GRANULARITIES = [60, 900, 3600, 86400]; // 1분, 15분, 1시간, 1일 (초 단위)
+const CANDLE_INTERVALS = [3, 5, 10, 15, 30, 60, 240, 1440, 10080];
+const GRANULARITIES = CANDLE_INTERVALS.map(interval => interval * 60); // 초 단위로 변환
 const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
@@ -23,28 +24,32 @@ function connectToDatabase() {
     });
 }
 
-async function createTable() {
-    return new Promise((resolve, reject) => {
-        const sql = `CREATE TABLE IF NOT EXISTS candles (
-            code TEXT,
-            tms INTEGER,
-            op REAL,
-            hp REAL,
-            lp REAL,
-            cp REAL,
-            tv REAL,
-            PRIMARY KEY (code, tms)
-        )`;
-        db.run(sql, (err) => {
-            if (err) {
-                console.error('테이블 생성 오류:', err.message);
-                reject(err);
-            } else {
-                console.log('Candles 테이블이 생성되었습니다.');
-                resolve();
-            }
+async function createTables() {
+    const promises = CANDLE_INTERVALS.map(interval => {
+        return new Promise((resolve, reject) => {
+            const sql = `CREATE TABLE IF NOT EXISTS candles_${interval} (
+                code TEXT,
+                tms INTEGER,
+                op REAL,
+                hp REAL,
+                lp REAL,
+                cp REAL,
+                tv REAL,
+                PRIMARY KEY (code, tms)
+            )`;
+            db.run(sql, (err) => {
+                if (err) {
+                    console.error(`테이블 생성 오류 (${interval}분):`, err.message);
+                    reject(err);
+                } else {
+                    console.log(`candles_${interval} 테이블이 생성되었습니다.`);
+                    resolve();
+                }
+            });
         });
     });
+
+    await Promise.all(promises);
 }
 
 async function getUSDProducts() {
@@ -73,9 +78,9 @@ async function fetchCandles(productId, granularity, end = new Date().toISOString
     }
 }
 
-async function saveCandles(productId, candles) {
+async function saveCandles(productId, candles, interval) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles 
+        const sql = `INSERT OR REPLACE INTO candles_${interval} 
                      (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
@@ -99,7 +104,7 @@ async function saveCandles(productId, candles) {
     });
 }
 
-async function collectHistoricalCandles(product, granularity) {
+async function collectHistoricalCandles(product, granularity, interval) {
     let collectedCandles = 0;
     let end = new Date().toISOString();
 
@@ -107,12 +112,12 @@ async function collectHistoricalCandles(product, granularity) {
         const candles = await fetchCandles(product.id, granularity, end);
         
         if (candles.length === 0 || candles.length < CANDLES_PER_REQUEST) {
-            await saveCandles(product.id, candles);
-            console.log(`${product.id} - ${granularity}초 캔들 수집 완료: ${collectedCandles + candles.length}개`);
+            await saveCandles(product.id, candles, interval);
+            console.log(`${product.id} - ${interval}분 캔들 수집 완료: ${collectedCandles + candles.length}개`);
             break;
         }
 
-        await saveCandles(product.id, candles);
+        await saveCandles(product.id, candles, interval);
         collectedCandles += candles.length;
         end = new Date(candles[candles.length - 1][0] * 1000).toISOString();
 
@@ -124,14 +129,14 @@ async function collectHistoricalCandles(product, granularity) {
 async function main() {
     try {
         await connectToDatabase();
-        await createTable();
+        await createTables();
 
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
         for (const product of products) {
-            for (const granularity of GRANULARITIES) {
-                await collectHistoricalCandles(product, granularity);
+            for (let i = 0; i < GRANULARITIES.length; i++) {
+                await collectHistoricalCandles(product, GRANULARITIES[i], CANDLE_INTERVALS[i]);
             }
         }
 
