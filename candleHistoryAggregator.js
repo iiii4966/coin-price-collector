@@ -1,4 +1,17 @@
-const { CANDLE_INTERVALS } = require('./dbUtils');
+const { CANDLE_INTERVALS, connectToDatabase } = require('./dbUtils');
+
+async function getAllCodes(db) {
+    return new Promise((resolve, reject) => {
+        const sql = `SELECT DISTINCT code FROM candles_1`;
+        db.all(sql, [], (err, rows) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(rows.map(row => row.code));
+            }
+        });
+    });
+}
 
 function getStartTime(timestamp, interval) {
     const date = new Date(timestamp * 1000);
@@ -23,7 +36,7 @@ function getStartTime(timestamp, interval) {
     return Math.floor(timestamp / (interval * 60)) * (interval * 60);
 }
 
-async function aggregateAllCandles(db, interval) {
+async function aggregateAllCandles(db, interval, code) {
     const baseTables =
         interval === 3 || interval === 5 ? 'candles_1' :
         interval === 10 || interval === 15 ? 'candles_5' :
@@ -43,13 +56,13 @@ async function aggregateAllCandles(db, interval) {
                    cp,
                    tv
             FROM ${baseTables}
-            WHERE code = 'BTC-USD'
+            WHERE code = ?
             ORDER BY tms ASC
         `;
 
-        db.all(sql, [], (err, rows) => {
+        db.all(sql, [code], (err, rows) => {
             if (err) {
-                console.error(`${interval}분 캔들 집계 오류:`, err.message);
+                console.error(`${interval}분 캔들 집계 오류 (${code}):`, err.message);
                 reject(err);
             } else {
                 const groupedCandles = {};
@@ -117,18 +130,38 @@ async function saveAggregatedCandles(db, interval, candles) {
 }
 
 async function aggregateHistoricalCandles(db) {
+    const codes = await getAllCodes(db);
     for (const interval of CANDLE_INTERVALS.slice(1)) {
         try {
             console.log(`${interval}분 캔들 집계 시작...`);
-            const aggregatedCandles = await aggregateAllCandles(db, interval);
-            await saveAggregatedCandles(db, interval, aggregatedCandles);
-            console.log(`${interval}분 캔들 집계 완료 (${aggregatedCandles.length}개)`);
+            for (const code of codes) {
+                console.log(`  ${code} 처리 중...`);
+                const aggregatedCandles = await aggregateAllCandles(db, interval, code);
+                await saveAggregatedCandles(db, interval, aggregatedCandles);
+                console.log(`  ${code} 완료 (${aggregatedCandles.length}개)`);
+            }
+            console.log(`${interval}분 캔들 집계 완료`);
         } catch (error) {
             console.error(`${interval}분 캔들 집계 중 오류 발생:`, error);
         }
     }
 }
 
+async function main() {
+    try {
+        const db = await connectToDatabase();
+        await aggregateHistoricalCandles(db);
+        db.close();
+    } catch (error) {
+        console.error('오류 발생:', error);
+    }
+}
+
 module.exports = {
-    aggregateHistoricalCandles
+    aggregateHistoricalCandles,
+    main
 };
+
+if (require.main === module) {
+    main();
+}
