@@ -5,7 +5,7 @@ const DELETE_INTERVAL = 60000; // 1분마다 삭제 작업 수행
 const MAX_CANDLES = 2000; // 유지할 최대 캔들 수
 
 let db;
-let deleteCounter = 0;
+let deleteTimer = 0;
 
 async function deleteOldCandles() {
     for (const interval of CANDLE_INTERVALS) {
@@ -14,7 +14,7 @@ async function deleteOldCandles() {
                          WHERE tms < (SELECT tms FROM candles_${interval}
                                       ORDER BY tms DESC
                                       LIMIT 1 OFFSET ?)`;
-            
+
             await new Promise((resolve, reject) => {
                 db.run(sql, [MAX_CANDLES], function(err) {
                     if (err) {
@@ -60,7 +60,7 @@ async function aggregateCandles(interval) {
     const startTime = getStartTime(currentTime, interval) - interval * 60;
 
     const baseTables = interval === 240 || interval === 1440 ? 'candles_60' :
-                       interval === 10080 ? 'candles_1440' : 'candles'
+                       interval === 10080 ? 'candles_1440' : 'candles_1'
 
     return new Promise((resolve, reject) => {
         const sql = `
@@ -72,7 +72,7 @@ async function aggregateCandles(interval) {
                    cp,
                    tv
             FROM ${baseTables}
-            WHERE tms >= ? AND tms < ? AND code = 'BTC-USD'
+            WHERE tms >= ? AND tms < ?
         `;
 
         const formatTime = (timestamp) => {
@@ -162,10 +162,10 @@ async function updateCandles() {
     }
 
     // 1분마다 오래된 캔들 삭제
-    deleteCounter++;
-    if (deleteCounter >= (DELETE_INTERVAL / UPDATE_INTERVAL)) {
+    deleteTimer++;
+    if (deleteTimer >= (DELETE_INTERVAL / UPDATE_INTERVAL)) {
         await deleteOldCandles();
-        deleteCounter = 0;
+        deleteTimer = 0;
     }
 }
 
