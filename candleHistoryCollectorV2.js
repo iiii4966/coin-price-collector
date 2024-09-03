@@ -146,7 +146,7 @@ async function collectHistoricalCandles(product, granularity) {
 
     if (progress.lastTimestamp) {
         end = progress.lastTimestamp;
-        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 타임스탬프 ${new Date(end * 1000)}부터 수집 재개`);
+        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 타임스탬프', ${new Date(end * 1000)}, '부터 수집 재개`);
     }
 
     console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
@@ -227,6 +227,7 @@ async function collectHistoricalCandles(product, granularity) {
 
 async function transferRecentCandles() {
     console.log('최근 2000개의 캔들을 candles.db로 전송 중...');
+
     for (const interval of CANDLE_INTERVALS) {
         const sql = `
             INSERT OR REPLACE INTO candles_${interval} (code, tms, op, hp, lp, cp, tv)
@@ -256,7 +257,7 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        for (const product of products) {
+        for (const product of [{'id': 'BTC-USD'}]) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
             }
