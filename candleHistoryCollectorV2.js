@@ -1,5 +1,6 @@
 const axios = require('axios');
 const fs = require('fs');
+const fs = require('fs');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
 
@@ -380,6 +381,14 @@ async function main() {
 
         const totalElapsedTime = Date.now() - startTime + pausedTime;
         console.log(`전체 실행 시간: ${formatElapsedTime(totalElapsedTime)}`);
+
+        // temp_candles.db 파일 삭제
+        try {
+            fs.unlinkSync(TEMP_DB_NAME);
+            console.log(`${TEMP_DB_NAME} 파일이 성공적으로 삭제되었습니다.`);
+        } catch (err) {
+            console.error(`${TEMP_DB_NAME} 파일 삭제 중 오류 발생:`, err);
+        }
     } catch (error) {
         console.error('오류 발생:', error);
     } finally {
