@@ -9,7 +9,7 @@ const MAX_CANDLES = {
     300: 4000,   // 5분
     900: 4000,   // 15분
     3600: 8000,  // 60분
-    86400: 2000  // 1일 (기존과 동일)
+    86400: 14000  // 1일 (기존과 동일)
 };
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
@@ -86,14 +86,6 @@ async function saveCandles(productId, candles, granularity) {
             });
         });
     });
-}
-
-function saveProgress(lastTimestamp) {
-    const progress = {
-        productId: PRODUCT_ID,
-        lastTimestamp: lastTimestamp
-    };
-    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
 }
 
 async function getStoredCandleCount(productId, granularity) {
@@ -238,10 +230,8 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        const relevantGranularities = [60, 300, 900, 3600]; // 1분, 5분, 15분, 60분
-
-        for (const product of products) {
-            for (const granularity of relevantGranularities) {
+        for (const product of [{id: 'BTC-USD'}]) {
+            for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
             }
         }
