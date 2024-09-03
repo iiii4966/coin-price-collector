@@ -1,8 +1,26 @@
 const axios = require('axios');
 const fs = require('fs');
-const fs = require('fs');
+const path = require('path');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
+
+const LOG_DIR = 'logs';
+const LOG_FILE = path.join(LOG_DIR, `candle_history_collector_${new Date().toISOString().replace(/:/g, '-')}.log`);
+
+// 로그 디렉토리 생성
+if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR);
+}
+
+// 로그 파일 스트림 생성
+const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+
+// 로그 함수
+function log(...args) {
+    const message = args.join(' ');
+    console.log(message);
+    logStream.write(message + '\n');
+}
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
@@ -57,7 +75,7 @@ async function getUSDProducts() {
             (product.status === 'online' || product.status === 'offline')
         );
     } catch (error) {
-        console.error('상품 목록 조회 중 오류 발생:', error.message);
+        log('상품 목록 조회 중 오류 발생:', error.message);
         throw error;
     }
 }
@@ -175,13 +193,13 @@ async function collectHistoricalCandles(product, granularity) {
 
     if (progress.lastTimestamp) {
         end = progress.lastTimestamp;
-        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 타임스탬프', ${new Date(end * 1000)}, '부터 수집 재개`);
+        log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 타임스탬프', ${new Date(end * 1000)}, '부터 수집 재개`);
     }
 
-    console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
+    log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
 
     if (remainingCandles <= 0) {
-        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
+        log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
         totalCandlesCollected += maxCandles;
         updateProgress();
         return;
@@ -395,21 +413,23 @@ async function main() {
         if (tempDb) {
             tempDb.close((err) => {
                 if (err) {
-                    console.error('임시 데이터베이스 연결 종료 중 오류 발생:', err.message);
+                    log('임시 데이터베이스 연결 종료 중 오류 발생:', err.message);
                 } else {
-                    console.log('임시 데이터베이스 연결이 종료되었습니다.');
+                    log('임시 데이터베이스 연결이 종료되었습니다.');
                 }
             });
         }
         if (finalDb) {
             finalDb.close((err) => {
                 if (err) {
-                    console.error('최종 데이터베이스 연결 종료 중 오류 발생:', err.message);
+                    log('최종 데이터베이스 연결 종료 중 오류 발생:', err.message);
                 } else {
-                    console.log('최종 데이터베이스 연결이 종료되었습니다.');
+                    log('최종 데이터베이스 연결이 종료되었습니다.');
                 }
             });
         }
+        // 로그 스트림 닫기
+        logStream.end();
     }
 }
 
