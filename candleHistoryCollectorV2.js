@@ -3,22 +3,44 @@ const fs = require('fs');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
-const GRANULARITY = 60; // 1분 캔들
-const MAX_CANDLES = 6000;
+const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
+const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
-const PRODUCT_ID = 'BTC-USD';
+const EMPTY_RESPONSE_RETRY_COUNT = 5;
+const EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT = 5;
 const TEMP_DB_NAME = 'temp_candles.db';
 const PROGRESS_FILE = 'candle_collection_progress.json';
 
+const GRANULARITY_TO_INTERVAL = {
+    60: 1,
+    300: 5,
+    900: 15,
+    3600: 60,
+    86400: 1440
+};
+
 let db;
 
-async function fetchCandles(end = null) {
-    const url = `${BASE_URL}/products/${PRODUCT_ID}/candles`;
-    const params = { granularity: GRANULARITY };
+async function getUSDProducts() {
+    try {
+        const response = await axios.get(`${BASE_URL}/products`);
+        return response.data.filter(product =>
+            product.quote_currency === 'USD' &&
+            (product.status === 'online' || product.status === 'offline')
+        );
+    } catch (error) {
+        console.error('상품 목록 조회 중 오류 발생:', error.message);
+        throw error;
+    }
+}
+
+async function fetchCandles(productId, granularity, end = null) {
+    const url = `${BASE_URL}/products/${productId}/candles`;
+    const params = { granularity };
 
     if (end) {
-        const start = end - (GRANULARITY * CANDLES_PER_REQUEST);
+        const start = end - (granularity * CANDLES_PER_REQUEST);
         params.start = start.toString();
         params.end = end.toString();
     }
@@ -27,9 +49,15 @@ async function fetchCandles(end = null) {
     return response.data;
 }
 
-async function saveCandles(candles) {
+async function saveCandles(productId, candles, granularity) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles_1 
+        const interval = GRANULARITY_TO_INTERVAL[granularity];
+        if (!interval) {
+            reject(new Error(`Invalid granularity: ${granularity}`));
+            return;
+        }
+
+        const sql = `INSERT OR REPLACE INTO candles_${interval} 
                      (code, tms, lp, hp, op, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
@@ -39,7 +67,7 @@ async function saveCandles(candles) {
             const stmt = db.prepare(sql);
             for (const candle of candles) {
                 const [tms, low, high, open, close, volume] = candle;
-                stmt.run(PRODUCT_ID, tms, low, high, open, close, volume);
+                stmt.run(productId, tms, low, high, open, close, volume);
             }
             stmt.finalize();
 
@@ -62,10 +90,11 @@ function saveProgress(lastTimestamp) {
     fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
 }
 
-async function getStoredCandleCount() {
+async function getStoredCandleCount(productId, granularity) {
     return new Promise((resolve, reject) => {
-        const sql = `SELECT COUNT(*) as count FROM candles_1 WHERE code = ?`;
-        db.get(sql, [PRODUCT_ID], (err, row) => {
+        const interval = GRANULARITY_TO_INTERVAL[granularity];
+        const sql = `SELECT COUNT(*) as count FROM candles_${interval} WHERE code = ?`;
+        db.get(sql, [productId], (err, row) => {
             if (err) {
                 reject(err);
             } else {
@@ -88,50 +117,87 @@ async function loadProgress() {
     return { storedCount: 0 };
 }
 
-async function collectHistoricalCandles() {
+async function collectHistoricalCandles(product, granularity) {
+    let collectedCandles = 0;
     let end = null;
 
-    const progress = await loadProgress();
+    let emptyResponseCount = 0;
+    let emptyResponseRetryMax = granularity === 86400 ? 2 : EMPTY_RESPONSE_RETRY_COUNT;
+
+    let sameStartEndCount = 0;
+
+    const progress = await loadProgress(product.id, granularity);
     const storedCount = progress.storedCount;
     const remainingCandles = MAX_CANDLES - storedCount;
 
     if (progress.lastTimestamp) {
         end = progress.lastTimestamp;
-        console.log(`Resuming collection from timestamp: ${new Date(end * 1000)}`);
+        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 타임스탬프 ${new Date(end * 1000)}부터 수집 재개`);
     }
 
-    console.log(`현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
+    console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
 
     if (remainingCandles <= 0) {
-        console.log(`${PRODUCT_ID} - 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
+        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
         return;
     }
 
-    let collectedCandles = 0;
-
     while (collectedCandles < remainingCandles) {
-        const candles = await fetchCandles(end);
+        const candles = await fetchCandles(product.id, granularity, end);
 
-        console.log(`${PRODUCT_ID} - 1분 캔들 조회: ${candles.length}개`);
+        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회: ${candles.length}개`);
 
         if (candles.length === 0) {
-            console.log(`${PRODUCT_ID} - 1분 캔들 수집 완료: 총 ${collectedCandles}개`);
-            break;
+            emptyResponseCount++;
+            const startTime = new Date((end - granularity * CANDLES_PER_REQUEST) * 1000);
+            const endTime = new Date(end * 1000);
+            console.log(
+                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째)`,
+                '시간 범위:', startTime, '~', endTime
+            );
+
+            if (emptyResponseCount > emptyResponseRetryMax) {
+                console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
+                break;
+            }
+            end = end - (granularity * CANDLES_PER_REQUEST);
+            continue;
         }
 
+        emptyResponseCount = 0;
         const start = candles[0][0];
         end = candles[candles.length - 1][0];
 
+        if (start === end) {
+            sameStartEndCount++;
+            console.log(
+                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: start와 end가 같음 (${sameStartEndCount}번째)`,
+                new Date(start * 1000), '~', new Date(end * 1000)
+            );
+
+            if (sameStartEndCount > EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT) {
+                console.log(
+                    `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
+                    new Date(start * 1000), '~', new Date(end * 1000)
+                );
+                break;
+            }
+            end = end - (granularity * CANDLES_PER_REQUEST);
+            continue;
+        }
+
+        sameStartEndCount = 0;
+
         const candlesToSave = candles.slice(0, remainingCandles - collectedCandles);
-        await saveCandles(candlesToSave);
+        await saveCandles(product.id, candlesToSave, granularity);
         collectedCandles += candlesToSave.length;
 
         console.log(
-            `${PRODUCT_ID} - 1분 캔들 저장 완료:`,
+            `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 저장 완료:`,
             `${candlesToSave.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
         );
 
-        saveProgress(end);
+        saveProgress(product.id, granularity, end);
 
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
@@ -141,7 +207,8 @@ async function collectHistoricalCandles() {
         }
     }
 
-    console.log(`${PRODUCT_ID} - 1분 캔들 수집 최종 완료: 총 ${collectedCandles}개 (전체 저장된 캔들: ${storedCount + collectedCandles}개)`);
+    console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 최종 완료: 총 ${collectedCandles}개 (전체 저장된 캔들: ${storedCount + collectedCandles}개)`);
+    console.log();
 }
 
 async function main() {
@@ -149,9 +216,16 @@ async function main() {
         db = await connectToDatabase(TEMP_DB_NAME);
         await createTables(db);
 
-        await collectHistoricalCandles();
+        const products = await getUSDProducts();
+        console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        console.log('BTC-USD 1분 캔들 데이터 수집이 완료되었습니다.');
+        for (const product of products) {
+            for (const granularity of GRANULARITIES) {
+                await collectHistoricalCandles(product, granularity);
+            }
+        }
+
+        console.log('모든 과거 캔들 데이터 수집이 완료되었습니다.');
     } catch (error) {
         console.error('오류 발생:', error);
     } finally {
