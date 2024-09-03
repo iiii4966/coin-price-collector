@@ -57,7 +57,7 @@ async function saveCandles(productId, candles, granularity) {
         }
 
         const sql = `INSERT OR REPLACE INTO candles_${interval} 
-                     (code, tms, op, hp, lp, cp, tv) 
+                     (code, tms, lp, hp, op, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         db.serialize(() => {
@@ -65,7 +65,8 @@ async function saveCandles(productId, candles, granularity) {
 
             const stmt = db.prepare(sql);
             for (const candle of candles) {
-                stmt.run(productId, ...candle);
+                const [tms, low, high, open, close, volume] = candle;
+                stmt.run(productId, tms, low, high, open, close, volume);
             }
             stmt.finalize();
 
