@@ -349,7 +349,8 @@ async function main() {
         // 전체 수집해야 할 캔들 수 계산
         totalCandlesToCollect = (totalProducts * GRANULARITIES.reduce((sum, granularity) => sum + GRANULARITY_TO_MAX_CANDLES[granularity], 0)) - storedCandlesCount;
 
-        for (const product of [{id: 'BTC-USD'}, {id: 'SOL-USD'}]) {
+        // 캔들 수집
+        for (const product of products) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
                 completedGranularities++;
