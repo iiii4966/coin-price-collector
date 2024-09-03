@@ -19,6 +19,9 @@ const EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT = 5;
 const TEMP_DB_NAME = 'temp_candles.db';
 const FINAL_DB_NAME = 'candles.db';
 const PROGRESS_FILE = 'candle_collection_progress.json';
+let totalProducts = 0;
+let completedProducts = 0;
+let completedGranularities = 0;
 
 const GRANULARITY_TO_INTERVAL = {
     60: 1,
@@ -293,15 +296,20 @@ async function main() {
         await createTables(tempDb);
 
         const products = await getUSDProducts();
-        console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
+        totalProducts = products.length;
+        console.log(`총 ${totalProducts}개의 USD 상품을 찾았습니다.`);
 
         for (const product of products) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
+                completedGranularities++;
+                updateProgress();
             }
+            completedProducts++;
+            updateProgress();
         }
 
-        console.log('모든 과거 캔들 데이터 수집이 완료되었습니다.');
+        console.log('모든 과거 캔들 데이터 수집이 완료되었습니다. (100%)');
 
         console.log('캔들 집계 시작...');
         await aggregateHistoricalCandles(tempDb);
@@ -340,6 +348,13 @@ async function main() {
             });
         }
     }
+}
+
+function updateProgress() {
+    const totalTasks = totalProducts * GRANULARITIES.length;
+    const completedTasks = (completedProducts * GRANULARITIES.length) + completedGranularities;
+    const progressPercentage = (completedTasks / totalTasks) * 100;
+    console.log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
 }
 
 main();
