@@ -19,12 +19,12 @@ const EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT = 5;
 const TEMP_DB_NAME = 'temp_candles.db';
 const FINAL_DB_NAME = 'candles.db';
 const PROGRESS_FILE = 'candle_collection_progress.json';
+
 let totalProducts = 0;
 let completedProducts = 0;
 let completedGranularities = 0;
 let totalCandlesCollected = 0;
 let totalCandlesToCollect = 0;
-let startTime;
 let startTime;
 let pausedTime = 0;
 
@@ -331,7 +331,7 @@ async function main() {
         // 전체 수집해야 할 캔들 수 계산
         totalCandlesToCollect = totalProducts * GRANULARITIES.reduce((sum, granularity) => sum + GRANULARITY_TO_MAX_CANDLES[granularity], 0);
 
-        for (const product of products) {
+        for (const product of [{id: 'BTC-USD'}, {id: 'SOL-USD'}]) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
                 completedGranularities++;
@@ -391,6 +391,8 @@ function updateProgress() {
     const progressPercentage = (completedTasks / totalTasks) * 100;
     const candleProgressPercentage = (totalCandlesCollected / totalCandlesToCollect) * 100;
     const currentElapsedTime = Date.now() - startTime + pausedTime;
+
+    console.log()
     console.log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
     console.log(`캔들 수집 진행 상황: ${candleProgressPercentage.toFixed(2)}% (${totalCandlesCollected}/${totalCandlesToCollect} 캔들)`);
     console.log(`실행 시간: ${formatElapsedTime(currentElapsedTime)}`);
