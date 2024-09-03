@@ -30,14 +30,15 @@ async function getUSDProducts() {
     }
 }
 
-async function fetchCandles(productId, granularity, end = Math.floor(Date.now() / 1000)) {
-    const start = end - (granularity * CANDLES_PER_REQUEST);
+async function fetchCandles(productId, granularity, end = null) {
     const url = `${BASE_URL}/products/${productId}/candles`;
-    const params = {
-        granularity,
-        start: start.toString(),
-        end: end.toString()
-    };
+    const params = { granularity };
+
+    if (end) {
+        const start = end - (granularity * CANDLES_PER_REQUEST);
+        params.start = start.toString();
+        params.end = end.toString();
+    }
 
     try {
         const response = await axios.get(url, { params });
@@ -83,15 +84,20 @@ async function saveCandles(productId, candles, granularity) {
 
 async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
-    let end = Math.floor(Date.now() / 1000);
+    let end = null;
 
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
 
-        const start = candles[0][0]
+        if (candles.length === 0) {
+            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: ${collectedCandles}개`);
+            break;
+        }
+
+        const start = candles[0][0];
         end = candles[candles.length - 1][0];
 
-        if (candles.length === 0 || start === end) {
+        if (start === end) {
             console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: ${collectedCandles}개`);
             break;
         }
