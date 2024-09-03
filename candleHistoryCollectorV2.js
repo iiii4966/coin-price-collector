@@ -208,19 +208,19 @@ async function collectHistoricalCandles(product, granularity) {
     while (collectedCandles < remainingCandles) {
         const candles = await fetchCandles(product.id, granularity, end);
 
-        console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회: ${candles.length}개`);
+        log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회: ${candles.length}개`);
 
         if (candles.length === 0) {
             emptyResponseCount++;
             const startTime = new Date((end - granularity * CANDLES_PER_REQUEST) * 1000);
             const endTime = new Date(end * 1000);
-            console.log(
+            log(
                 `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째)`,
                 '시간 범위:', startTime, '~', endTime
             );
 
             if (emptyResponseCount > emptyResponseRetryMax) {
-                console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
+                log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
                 break;
             }
             end = end - (granularity * CANDLES_PER_REQUEST);
@@ -233,13 +233,13 @@ async function collectHistoricalCandles(product, granularity) {
 
         if (start === end) {
             sameStartEndCount++;
-            console.log(
+            log(
                 `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: start와 end가 같음 (${sameStartEndCount}번째)`,
                 new Date(start * 1000), '~', new Date(end * 1000)
             );
 
             if (sameStartEndCount > EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT) {
-                console.log(
+                log(
                     `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
                     new Date(start * 1000), '~', new Date(end * 1000)
                 );
@@ -256,7 +256,7 @@ async function collectHistoricalCandles(product, granularity) {
         collectedCandles += candlesToSave.length;
         totalCandlesCollected += candlesToSave.length;
 
-        console.log(
+        log(
             `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 저장 완료:`,
             `${candlesToSave.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
         );
@@ -272,12 +272,12 @@ async function collectHistoricalCandles(product, granularity) {
         }
     }
 
-    console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 최종 완료: 총 ${collectedCandles}개 (전체 저장된 캔들: ${storedCount + collectedCandles}개)`);
-    console.log();
+    log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 최종 완료: 총 ${collectedCandles}개 (전체 저장된 캔들: ${storedCount + collectedCandles}개)`);
+    log();
 }
 
 async function transferRecentCandles() {
-    console.log('최근 2000개의 캔들을 candles.db로 전송 중...');
+    log('최근 2000개의 캔들을 candles.db로 전송 중...');
 
     // 모든 상품 코드 조회
     const productCodes = await new Promise((resolve, reject) => {
@@ -288,7 +288,7 @@ async function transferRecentCandles() {
     });
 
     for (const interval of CANDLE_INTERVALS) {
-        console.log(`${interval}분 캔들 전송 시작...`);
+        log(`${interval}분 캔들 전송 시작...`);
 
         for (const productCode of productCodes) {
             // 임시 데이터베이스에서 최근 2000개의 캔들 조회
@@ -330,12 +330,12 @@ async function transferRecentCandles() {
                 });
             });
 
-            console.log(`${interval}분 캔들 - ${productCode} 전송 완료 (${candles.length}개)`);
+            log(`${interval}분 캔들 - ${productCode} 전송 완료 (${candles.length}개)`);
         }
 
-        console.log(`${interval}분 캔들 전송 완료`);
+        log(`${interval}분 캔들 전송 완료`);
     }
-    console.log('모든 캔들 전송이 완료되었습니다.');
+    log('모든 캔들 전송이 완료되었습니다.');
 }
 
 async function calculateStoredCandlesCount() {
@@ -360,7 +360,7 @@ async function main() {
 
         const products = await getUSDProducts();
         totalProducts = products.length;
-        console.log(`총 ${totalProducts}개의 USD 상품을 찾았습니다.`);
+        log(`총 ${totalProducts}개의 USD 상품을 찾았습니다.`);
 
         // 이미 저장된 캔들 수 계산
         storedCandlesCount = await calculateStoredCandlesCount();
@@ -379,11 +379,11 @@ async function main() {
             updateProgress();
         }
 
-        console.log('모든 과거 캔들 데이터 수집이 완료되었습니다. (100%)');
+        log('모든 과거 캔들 데이터 수집이 완료되었습니다. (100%)');
 
-        console.log('캔들 집계 시작...');
+        log('캔들 집계 시작...');
         await aggregateHistoricalCandles(tempDb);
-        console.log('캔들 집계 완료');
+        log('캔들 집계 완료');
 
         finalDb = await connectToDatabase(FINAL_DB_NAME);
         await createTables(finalDb);
@@ -392,18 +392,18 @@ async function main() {
         // 캔들 데이터 성공적으로 수집시 candle_collection_progress.json 파일 삭제
         try {
             fs.unlinkSync(PROGRESS_FILE);
-            console.log('candle_collection_progress.json 파일이 삭제되었습니다.');
+            log('candle_collection_progress.json 파일이 삭제되었습니다.');
         } catch (err) {
             console.error('candle_collection_progress.json 파일 삭제 중 오류 발생:', err);
         }
 
         const totalElapsedTime = Date.now() - startTime + pausedTime;
-        console.log(`전체 실행 시간: ${formatElapsedTime(totalElapsedTime)}`);
+        log(`전체 실행 시간: ${formatElapsedTime(totalElapsedTime)}`);
 
         // temp_candles.db 파일 삭제
         try {
             fs.unlinkSync(TEMP_DB_NAME);
-            console.log(`${TEMP_DB_NAME} 파일이 성공적으로 삭제되었습니다.`);
+            log(`${TEMP_DB_NAME} 파일이 성공적으로 삭제되었습니다.`);
         } catch (err) {
             console.error(`${TEMP_DB_NAME} 파일 삭제 중 오류 발생:`, err);
         }
@@ -442,10 +442,10 @@ function updateProgress() {
     const candleProgressPercentage = (totalCollectedCandles / totalExpectedCandles) * 100;
     const currentElapsedTime = Date.now() - startTime + pausedTime;
 
-    console.log()
-    console.log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
-    console.log(`캔들 수집 진행 상황: ${candleProgressPercentage.toFixed(2)}% (${totalCollectedCandles}/${totalExpectedCandles} 캔들)`);
-    console.log(`실행 시간: ${formatElapsedTime(currentElapsedTime)}`);
+    log()
+    log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
+    log(`캔들 수집 진행 상황: ${candleProgressPercentage.toFixed(2)}% (${totalCollectedCandles}/${totalExpectedCandles} 캔들)`);
+    log(`실행 시간: ${formatElapsedTime(currentElapsedTime)}`);
 }
 
 main();
