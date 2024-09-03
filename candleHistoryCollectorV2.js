@@ -1,6 +1,5 @@
 const axios = require('axios');
 const fs = require('fs');
-const fs = require('fs');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
 
@@ -281,7 +280,7 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        for (const product of [{'id': 'BTC-USD'}]) {
+        for (const product of [{'id': 'BTC-USD'}, {'id': 'SOL-USD'}]) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
             }
@@ -297,6 +296,13 @@ async function main() {
         await createTables(finalDb);
         await transferRecentCandles();
 
+        // 캔들 데이터 성공적으로 수집시 candle_collection_progress.json 파일 삭제
+        try {
+            fs.unlinkSync(PROGRESS_FILE);
+            console.log('candle_collection_progress.json 파일이 삭제되었습니다.');
+        } catch (err) {
+            console.error('candle_collection_progress.json 파일 삭제 중 오류 발생:', err);
+        }
     } catch (error) {
         console.error('오류 발생:', error);
     } finally {
@@ -317,14 +323,6 @@ async function main() {
                     console.log('최종 데이터베이스 연결이 종료되었습니다.');
                 }
             });
-        }
-
-        // 프로그램 종료 시 candle_collection_progress.json 파일 삭제
-        try {
-            fs.unlinkSync(PROGRESS_FILE);
-            console.log('candle_collection_progress.json 파일이 삭제되었습니다.');
-        } catch (err) {
-            console.error('candle_collection_progress.json 파일 삭제 중 오류 발생:', err);
         }
     }
 }
