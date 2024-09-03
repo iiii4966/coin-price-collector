@@ -1,5 +1,6 @@
 const axios = require('axios');
 const fs = require('fs');
+const fs = require('fs');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
 
@@ -316,6 +317,14 @@ async function main() {
                     console.log('최종 데이터베이스 연결이 종료되었습니다.');
                 }
             });
+        }
+
+        // 프로그램 종료 시 candle_collection_progress.json 파일 삭제
+        try {
+            fs.unlinkSync(PROGRESS_FILE);
+            console.log('candle_collection_progress.json 파일이 삭제되었습니다.');
+        } catch (err) {
+            console.error('candle_collection_progress.json 파일 삭제 중 오류 발생:', err);
         }
     }
 }
