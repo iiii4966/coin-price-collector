@@ -87,6 +87,9 @@ async function collectHistoricalCandles(product, granularity) {
 
         if (candles.length === 0) {
             emptyResponseCount++;
+            const startTime = new Date((end - granularity * CANDLES_PER_REQUEST) * 1000);
+            const endTime = new Date(end * 1000);
+            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째), 시간 범위: ${startTime} ~ ${endTime}`);
             if (emptyResponseCount >= 3) {
                 console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
                 break;
