@@ -1,8 +1,36 @@
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
 
 const UPDATE_INTERVAL = 5000; // 5초마다 업데이트
+const DELETE_INTERVAL = 60000; // 1분마다 삭제 작업 수행
+const MAX_CANDLES = 2000; // 유지할 최대 캔들 수
 
 let db;
+let deleteCounter = 0;
+
+async function deleteOldCandles() {
+    for (const interval of CANDLE_INTERVALS) {
+        try {
+            const sql = `DELETE FROM candles_${interval}
+                         WHERE tms < (SELECT tms FROM candles_${interval}
+                                      ORDER BY tms DESC
+                                      LIMIT 1 OFFSET ?)`;
+            
+            await new Promise((resolve, reject) => {
+                db.run(sql, [MAX_CANDLES], function(err) {
+                    if (err) {
+                        console.error(`${interval}분 캔들 삭제 중 오류 발생:`, err.message);
+                        reject(err);
+                    } else {
+                        console.log(`${interval}분 캔들 ${this.changes}개 삭제됨`);
+                        resolve();
+                    }
+                });
+            });
+        } catch (error) {
+            console.error(`${interval}분 캔들 삭제 중 오류 발생:`, error);
+        }
+    }
+}
 
 function getStartTime(timestamp, interval) {
     const date = new Date(timestamp * 1000);
@@ -131,6 +159,13 @@ async function updateCandles() {
         } catch (error) {
             console.error(`${interval}분 캔들 업데이트 중 오류 발생:`, error);
         }
+    }
+
+    // 1분마다 오래된 캔들 삭제
+    deleteCounter++;
+    if (deleteCounter >= (DELETE_INTERVAL / UPDATE_INTERVAL)) {
+        await deleteOldCandles();
+        deleteCounter = 0;
     }
 }
 
