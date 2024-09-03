@@ -4,22 +4,25 @@ const { connectToDatabase, CANDLE_INTERVALS } = require('./dbUtils');
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const PRODUCT_ID = 'BTC-USD';
-const CANDLES_TO_CHECK = 2000;
+const CANDLES_TO_CHECK = 200;
 
 const INTERVAL_TO_GRANULARITY = {
-    3: 180,
+    // 3: 180,
     5: 300,
     15: 900,
     60: 3600,
-    240: 14400,
+    // 240: 14400,
     1440: 86400,
-    10080: 604800
+    // 10080: 604800
 };
 
 let db;
 
 async function fetchCoinbaseCandles(interval) {
     const granularity = INTERVAL_TO_GRANULARITY[interval];
+    if (!granularity) {
+        return [];
+    }
     const end = Math.floor(Date.now() / 1000);
     const start = end - (granularity * CANDLES_TO_CHECK);
     const url = `${BASE_URL}/products/${PRODUCT_ID}/candles`;
@@ -44,7 +47,7 @@ function getLocalCandles(interval) {
                      WHERE code = ? 
                      ORDER BY tms DESC 
                      LIMIT ?`;
-        
+
         db.all(sql, [PRODUCT_ID, CANDLES_TO_CHECK], (err, rows) => {
             if (err) {
                 reject(err);
@@ -81,9 +84,14 @@ function compareCandles(localCandles, coinbaseCandles, interval) {
 
 async function checkCandleIntegrity(interval) {
     console.log(`${interval}분 캔들 데이터 무결성 검사 시작...`);
-    
+
     const localCandles = await getLocalCandles(interval);
     const coinbaseCandles = await fetchCoinbaseCandles(interval);
+
+    if (coinbaseCandles.length === 0) {
+        console.log(`코인베이스 ${interval}분 캔들: 존재하지 않습니다.`);
+        return;
+    }
 
     compareCandles(localCandles, coinbaseCandles, interval);
 }
@@ -94,6 +102,7 @@ async function main() {
 
         for (const interval of CANDLE_INTERVALS.slice(1)) { // 3분부터 시작
             await checkCandleIntegrity(interval);
+            console.log()
         }
 
     } catch (error) {
