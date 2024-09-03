@@ -22,6 +22,8 @@ const PROGRESS_FILE = 'candle_collection_progress.json';
 let totalProducts = 0;
 let completedProducts = 0;
 let completedGranularities = 0;
+let totalCandlesCollected = 0;
+let totalCandlesToCollect = 0;
 
 const GRANULARITY_TO_INTERVAL = {
     60: 1,
@@ -29,6 +31,14 @@ const GRANULARITY_TO_INTERVAL = {
     900: 15,
     3600: 60,
     86400: 1440
+};
+
+const GRANULARITY_TO_MAX_CANDLES = {
+    60: 6000,
+    300: 4000,
+    900: 4000,
+    3600: 8000,
+    86400: 14000
 };
 
 let tempDb;
@@ -144,7 +154,7 @@ async function collectHistoricalCandles(product, granularity) {
 
     const progress = await loadProgress(product.id, granularity);
     const storedCount = progress.storedCount;
-    const maxCandles = MAX_CANDLES[granularity] || 2000; // Default to 2000 if not specified
+    const maxCandles = GRANULARITY_TO_MAX_CANDLES[granularity];
     const remainingCandles = maxCandles - storedCount;
 
     if (progress.lastTimestamp) {
@@ -156,6 +166,8 @@ async function collectHistoricalCandles(product, granularity) {
 
     if (remainingCandles <= 0) {
         console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
+        totalCandlesCollected += maxCandles;
+        updateProgress();
         return;
     }
 
@@ -208,6 +220,7 @@ async function collectHistoricalCandles(product, granularity) {
         const candlesToSave = candles.slice(0, remainingCandles - collectedCandles);
         await saveCandles(product.id, candlesToSave, granularity);
         collectedCandles += candlesToSave.length;
+        totalCandlesCollected += candlesToSave.length;
 
         console.log(
             `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 저장 완료:`,
@@ -215,6 +228,7 @@ async function collectHistoricalCandles(product, granularity) {
         );
 
         saveProgress(product.id, granularity, end);
+        updateProgress();
 
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
@@ -299,6 +313,9 @@ async function main() {
         totalProducts = products.length;
         console.log(`총 ${totalProducts}개의 USD 상품을 찾았습니다.`);
 
+        // 전체 수집해야 할 캔들 수 계산
+        totalCandlesToCollect = totalProducts * GRANULARITIES.reduce((sum, granularity) => sum + GRANULARITY_TO_MAX_CANDLES[granularity], 0);
+
         for (const product of products) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
@@ -354,7 +371,9 @@ function updateProgress() {
     const totalTasks = totalProducts * GRANULARITIES.length;
     const completedTasks = (completedProducts * GRANULARITIES.length) + completedGranularities;
     const progressPercentage = (completedTasks / totalTasks) * 100;
+    const candleProgressPercentage = (totalCandlesCollected / totalCandlesToCollect) * 100;
     console.log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
+    console.log(`캔들 수집 진행 상황: ${candleProgressPercentage.toFixed(2)}% (${totalCandlesCollected}/${totalCandlesToCollect} 캔들)`);
 }
 
 main();
