@@ -40,13 +40,8 @@ async function fetchCandles(productId, granularity, end = null) {
         params.end = end.toString();
     }
 
-    try {
-        const response = await axios.get(url, { params });
-        return response.data;
-    } catch (error) {
-        console.error(`캔들 데이터 조회 중 오류 발생 (${productId}, ${granularity}):`, error.message);
-        return [];
-    }
+    const response = await axios.get(url, { params });
+    return response.data;
 }
 
 async function saveCandles(productId, candles, granularity) {
@@ -128,7 +123,7 @@ async function main() {
         //         await collectHistoricalCandles(product, granularity);
         //     }
         // }
-        for (const granularity of GRANULARITIES.slice(0, 1)) {
+        for (const granularity of GRANULARITIES.slice(1, 2)) {
             await collectHistoricalCandles({id: 'PAX-USD'}, granularity);
         }
 
