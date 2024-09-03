@@ -62,25 +62,54 @@ function saveProgress(lastTimestamp) {
     fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
 }
 
-function loadProgress() {
+async function getStoredCandleCount() {
+    return new Promise((resolve, reject) => {
+        const sql = `SELECT COUNT(*) as count FROM candles_1 WHERE code = ?`;
+        db.get(sql, [PRODUCT_ID], (err, row) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(row.count);
+            }
+        });
+    });
+}
+
+async function loadProgress() {
     if (fs.existsSync(PROGRESS_FILE)) {
         const data = fs.readFileSync(PROGRESS_FILE, 'utf8');
-        return JSON.parse(data);
+        const progress = JSON.parse(data);
+        const storedCount = await getStoredCandleCount();
+        return {
+            ...progress,
+            storedCount
+        };
     }
-    return null;
+    return { storedCount: 0 };
 }
 
 async function collectHistoricalCandles() {
-    let collectedCandles = 0;
     let end = null;
 
-    const progress = loadProgress();
-    if (progress && progress.productId === PRODUCT_ID) {
+    const progress = await loadProgress();
+    const storedCount = progress.storedCount;
+    const remainingCandles = MAX_CANDLES - storedCount;
+
+    if (progress.lastTimestamp) {
         end = progress.lastTimestamp;
         console.log(`Resuming collection from timestamp: ${new Date(end * 1000)}`);
     }
 
-    while (collectedCandles < MAX_CANDLES) {
+    console.log(`현재 저장된 캔들 수: ${storedCount}, 수집 가능한 캔들 수: ${remainingCandles}`);
+
+    if (remainingCandles <= 0) {
+        console.log(`${PRODUCT_ID} - 이미 충분한 캔들이 저장되어 있습니다. 수집을 종료합니다.`);
+        return;
+    }
+
+    let collectedCandles = 0;
+
+    while (collectedCandles < remainingCandles) {
         const candles = await fetchCandles(end);
 
         console.log(`${PRODUCT_ID} - 1분 캔들 조회: ${candles.length}개`);
@@ -93,21 +122,26 @@ async function collectHistoricalCandles() {
         const start = candles[0][0];
         end = candles[candles.length - 1][0];
 
-        await saveCandles(candles);
-        collectedCandles += candles.length;
+        const candlesToSave = candles.slice(0, remainingCandles - collectedCandles);
+        await saveCandles(candlesToSave);
+        collectedCandles += candlesToSave.length;
 
         console.log(
             `${PRODUCT_ID} - 1분 캔들 저장 완료:`,
-            `${candles.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
+            `${candlesToSave.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
         );
 
         saveProgress(end);
 
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
+
+        if (collectedCandles >= remainingCandles) {
+            break;
+        }
     }
 
-    console.log(`${PRODUCT_ID} - 1분 캔들 수집 최종 완료: 총 ${collectedCandles}개`);
+    console.log(`${PRODUCT_ID} - 1분 캔들 수집 최종 완료: 총 ${collectedCandles}개 (전체 저장된 캔들: ${storedCount + collectedCandles}개)`);
 }
 
 async function main() {
