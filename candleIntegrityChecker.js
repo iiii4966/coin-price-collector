@@ -3,6 +3,10 @@ const sqlite3 = require('sqlite3').verbose();
 const { connectToDatabase, CANDLE_INTERVALS } = require('./dbUtils');
 const fs = require('fs');
 
+function isApproximatelyEqual(a, b, tolerance = 0.001) {
+    return Math.abs(a - b) < tolerance;
+}
+
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const PRODUCT_ID = 'BTC-USD';
 const CANDLES_TO_CHECK = 200;
@@ -73,11 +77,11 @@ function compareCandles(localCandles, coinbaseCandles, interval) {
         const coinbaseCandle = coinbaseMap.get(localCandle.tms);
         if (coinbaseCandle) {
             if (
-                localCandle.op !== coinbaseCandle[3] ||
-                localCandle.hp !== coinbaseCandle[2] ||
-                localCandle.lp !== coinbaseCandle[1] ||
-                localCandle.cp !== coinbaseCandle[4] ||
-                localCandle.tv !== coinbaseCandle[5]
+                !isApproximatelyEqual(localCandle.op, coinbaseCandle[3]) ||
+                !isApproximatelyEqual(localCandle.hp, coinbaseCandle[2]) ||
+                !isApproximatelyEqual(localCandle.lp, coinbaseCandle[1]) ||
+                !isApproximatelyEqual(localCandle.cp, coinbaseCandle[4]) ||
+                !isApproximatelyEqual(localCandle.tv, coinbaseCandle[5])
             ) {
                 differences++;
                 writeDifferenceToFile(localCandle, coinbaseCandle, interval);
