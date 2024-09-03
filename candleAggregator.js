@@ -59,7 +59,12 @@ async function aggregateCandles(interval) {
     const currentTime = Math.floor(Date.now() / 1000);
     const startTime = getStartTime(currentTime, interval) - interval * 60;
 
-    const baseTables = interval === 240 || interval === 1440 ? 'candles_60' :
+    const baseTables = interval === 3 || interval === 5 ? 'candles_1' :
+                       interval === 10 || interval === 15 ? 'candles_5' :
+                       interval === 30 ? 'candles_15' :
+                       interval === 60 ? 'candles_30' :
+                       interval === 240 ? 'candles_60' :
+                       interval === 1440 ? 'candles_240' :
                        interval === 10080 ? 'candles_1440' : 'candles_1'
 
     return new Promise((resolve, reject) => {
