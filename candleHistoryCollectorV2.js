@@ -70,17 +70,17 @@ async function saveCandles(productId, candles, granularity) {
                      (code, tms, lp, hp, op, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
-        db.serialize(() => {
-            db.run('BEGIN TRANSACTION');
+        tempDb.serialize(() => {
+            tempDb.run('BEGIN TRANSACTION');
 
-            const stmt = db.prepare(sql);
+            const stmt = tempDb.prepare(sql);
             for (const candle of candles) {
                 const [tms, low, high, open, close, volume] = candle;
                 stmt.run(productId, tms, low, high, open, close, volume);
             }
             stmt.finalize();
 
-            db.run('COMMIT', (err) => {
+            tempDb.run('COMMIT', (err) => {
                 if (err) {
                     reject(err);
                 } else {
@@ -95,7 +95,7 @@ async function getStoredCandleCount(productId, granularity) {
     return new Promise((resolve, reject) => {
         const interval = GRANULARITY_TO_INTERVAL[granularity];
         const sql = `SELECT COUNT(*) as count FROM candles_${interval} WHERE code = ?`;
-        db.get(sql, [productId], (err, row) => {
+        tempDb.get(sql, [productId], (err, row) => {
             if (err) {
                 reject(err);
             } else {
