@@ -6,6 +6,7 @@ const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간
 const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
+const EMPTY_RESPONSE_RETRY_COUNT = 3;
 
 const GRANULARITY_TO_INTERVAL = {
     60: 1,
@@ -85,12 +86,21 @@ async function collectHistoricalCandles(product, granularity) {
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
 
+        const start = candles[0][0];
+        end = candles[candles.length - 1][0];
+
+        console.log(
+            `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회:`,
+            `${candles.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
+        );
+
         if (candles.length === 0) {
             emptyResponseCount++;
             const startTime = new Date((end - granularity * CANDLES_PER_REQUEST) * 1000);
             const endTime = new Date(end * 1000);
             console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째), 시간 범위: ${startTime} ~ ${endTime}`);
-            if (emptyResponseCount >= 3) {
+
+            if (emptyResponseCount > EMPTY_RESPONSE_RETRY_COUNT) {
                 console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
                 break;
             }
@@ -99,21 +109,22 @@ async function collectHistoricalCandles(product, granularity) {
         }
 
         emptyResponseCount = 0;
-        const start = candles[0][0];
-        end = candles[candles.length - 1][0];
 
         if (start === end) {
-            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
+            console.log(
+                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
+                new Date(start * 1000), '~', new Date(end * 1000)
+            );
             break;
         }
 
-        console.log(
-            `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들:`,
-            `${candles.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
-        );
-
         await saveCandles(product.id, candles, granularity);
         collectedCandles += candles.length;
+
+        console.log(
+            `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 저장 완료:`,
+            `${candles.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
+        );
 
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
