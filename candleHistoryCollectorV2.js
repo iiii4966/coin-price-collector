@@ -5,7 +5,7 @@ const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils
 const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
 
 const LOG_DIR = 'logs';
-const LOG_FILE = path.join(LOG_DIR, `candle_history_collector_${new Date().toISOString().replace(/:/g, '-')}.log`);
+const LOG_FILE = path.join(LOG_DIR, `candle_history_collector_${new Date().toISOString().split('T')[0]}.log`);
 
 // 로그 디렉토리 생성
 if (!fs.existsSync(LOG_DIR)) {
