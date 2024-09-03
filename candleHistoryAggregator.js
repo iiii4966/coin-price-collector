@@ -1,6 +1,4 @@
-const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
-
-let db;
+const { CANDLE_INTERVALS } = require('./dbUtils');
 
 function getStartTime(timestamp, interval) {
     const date = new Date(timestamp * 1000);
@@ -25,7 +23,7 @@ function getStartTime(timestamp, interval) {
     return Math.floor(timestamp / (interval * 60)) * (interval * 60);
 }
 
-async function aggregateAllCandles(interval) {
+async function aggregateAllCandles(db, interval) {
     const baseTables =
         interval === 3 || interval === 5 ? 'candles_1' :
         interval === 10 || interval === 15 ? 'candles_5' :
@@ -82,7 +80,7 @@ async function aggregateAllCandles(interval) {
     });
 }
 
-async function saveAggregatedCandles(interval, candles) {
+async function saveAggregatedCandles(db, interval, candles) {
     return new Promise((resolve, reject) => {
         const sql = `INSERT OR REPLACE INTO candles_${interval} 
                      (code, tms, op, hp, lp, cp, tv) 
@@ -118,25 +116,12 @@ async function saveAggregatedCandles(interval, candles) {
     });
 }
 
-async function aggregateHistoricalCandles() {
-    for (const interval of CANDLE_INTERVALS.slice(1)) {
-        try {
-            console.log(`${interval}분 캔들 집계 시작...`);
-            const aggregatedCandles = await aggregateAllCandles(interval);
-            await saveAggregatedCandles(interval, aggregatedCandles);
-            console.log(`${interval}분 캔들 집계 완료 (${aggregatedCandles.length}개)`);
-        } catch (error) {
-            console.error(`${interval}분 캔들 집계 중 오류 발생:`, error);
-        }
-    }
-}
-
 async function aggregateHistoricalCandles(db) {
     for (const interval of CANDLE_INTERVALS.slice(1)) {
         try {
             console.log(`${interval}분 캔들 집계 시작...`);
-            const aggregatedCandles = await aggregateAllCandles(interval);
-            await saveAggregatedCandles(interval, aggregatedCandles);
+            const aggregatedCandles = await aggregateAllCandles(db, interval);
+            await saveAggregatedCandles(db, interval, aggregatedCandles);
             console.log(`${interval}분 캔들 집계 완료 (${aggregatedCandles.length}개)`);
         } catch (error) {
             console.error(`${interval}분 캔들 집계 중 오류 발생:`, error);
