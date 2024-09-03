@@ -3,7 +3,7 @@ const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
-const MAX_CANDLES = 100000;
+const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
 
@@ -123,7 +123,7 @@ async function main() {
         //     }
         // }
         for (const granularity of GRANULARITIES.slice(0, 1)) {
-            await collectHistoricalCandles({id: 'BTC-USD'}, granularity);
+            await collectHistoricalCandles({id: 'PAX-USD'}, granularity);
         }
 
         console.log('모든 과거 캔들 데이터 수집이 완료되었습니다.');
