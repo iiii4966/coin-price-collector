@@ -231,7 +231,7 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        for (const product of products) {
+        for (const product of ['BTC-USD']) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
             }
