@@ -4,7 +4,13 @@ const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
-const MAX_CANDLES = 2000;
+const MAX_CANDLES = {
+    60: 6000,    // 1분
+    300: 4000,   // 5분
+    900: 4000,   // 15분
+    3600: 8000,  // 60분
+    86400: 2000  // 1일 (기존과 동일)
+};
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
 const EMPTY_RESPONSE_RETRY_COUNT = 5;
@@ -140,7 +146,8 @@ async function collectHistoricalCandles(product, granularity) {
 
     const progress = await loadProgress(product.id, granularity);
     const storedCount = progress.storedCount;
-    const remainingCandles = MAX_CANDLES - storedCount;
+    const maxCandles = MAX_CANDLES[granularity] || 2000; // Default to 2000 if not specified
+    const remainingCandles = maxCandles - storedCount;
 
     if (progress.lastTimestamp) {
         end = progress.lastTimestamp;
@@ -231,8 +238,10 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        for (const product of ['BTC-USD']) {
-            for (const granularity of GRANULARITIES) {
+        const relevantGranularities = [60, 300, 900, 3600]; // 1분, 5분, 15분, 60분
+
+        for (const product of products) {
+            for (const granularity of relevantGranularities) {
                 await collectHistoricalCandles(product, granularity);
             }
         }
