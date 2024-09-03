@@ -229,21 +229,44 @@ async function transferRecentCandles() {
     console.log('최근 2000개의 캔들을 candles.db로 전송 중...');
 
     for (const interval of CANDLE_INTERVALS) {
-        const sql = `
-            INSERT OR REPLACE INTO candles_${interval} (code, tms, op, hp, lp, cp, tv)
+        // 임시 데이터베이스에서 최근 2000개의 캔들 조회
+        const selectSql = `
             SELECT code, tms, op, hp, lp, cp, tv
-            FROM (
-                SELECT * FROM temp_candles.db.candles_${interval}
-                ORDER BY tms DESC
-                LIMIT 2000
-            ) ORDER BY tms ASC
+            FROM candles_${interval}
+            ORDER BY tms DESC
+            LIMIT 2000
         `;
-        await new Promise((resolve, reject) => {
-            finalDb.run(sql, (err) => {
+
+        const candles = await new Promise((resolve, reject) => {
+            tempDb.all(selectSql, [], (err, rows) => {
                 if (err) reject(err);
-                else resolve();
+                else resolve(rows);
             });
         });
+
+        // 최종 데이터베이스에 삽입
+        const insertSql = `
+            INSERT OR REPLACE INTO candles_${interval} (code, tms, op, hp, lp, cp, tv)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await new Promise((resolve, reject) => {
+            finalDb.serialize(() => {
+                const stmt = finalDb.prepare(insertSql);
+                finalDb.run('BEGIN TRANSACTION');
+
+                for (const candle of candles.reverse()) { // 시간 순으로 정렬
+                    stmt.run(candle.code, candle.tms, candle.op, candle.hp, candle.lp, candle.cp, candle.tv);
+                }
+
+                stmt.finalize();
+                finalDb.run('COMMIT', (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        });
+
         console.log(`${interval}분 캔들 전송 완료`);
     }
     console.log('모든 캔들 전송이 완료되었습니다.');
