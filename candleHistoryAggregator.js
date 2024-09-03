@@ -131,26 +131,19 @@ async function aggregateHistoricalCandles() {
     }
 }
 
-async function main() {
-    try {
-        db = await connectToDatabase('temp_candles.db');
-        await createTables(db);
-
-        await aggregateHistoricalCandles();
-        console.log('모든 캔들 집계가 완료되었습니다.');
-    } catch (error) {
-        console.error('초기화 중 오류 발생:', error);
-    } finally {
-        if (db) {
-            db.close((err) => {
-                if (err) {
-                    console.error('데이터베이스 종료 오류:', err.message);
-                } else {
-                    console.log('데이터베이스 연결이 안전하게 종료되었습니다.');
-                }
-            });
+async function aggregateHistoricalCandles(db) {
+    for (const interval of CANDLE_INTERVALS.slice(1)) {
+        try {
+            console.log(`${interval}분 캔들 집계 시작...`);
+            const aggregatedCandles = await aggregateAllCandles(interval);
+            await saveAggregatedCandles(interval, aggregatedCandles);
+            console.log(`${interval}분 캔들 집계 완료 (${aggregatedCandles.length}개)`);
+        } catch (error) {
+            console.error(`${interval}분 캔들 집계 중 오류 발생:`, error);
         }
     }
 }
 
-main();
+module.exports = {
+    aggregateHistoricalCandles
+};

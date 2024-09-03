@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const { connectToDatabase, createTables, CANDLE_INTERVALS } = require('./dbUtils');
+const { aggregateHistoricalCandles } = require('./candleHistoryAggregator');
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간, 1일
@@ -16,6 +17,7 @@ const REQUESTS_PER_SECOND = 10;
 const EMPTY_RESPONSE_RETRY_COUNT = 5;
 const EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT = 5;
 const TEMP_DB_NAME = 'temp_candles.db';
+const FINAL_DB_NAME = 'candles.db';
 const PROGRESS_FILE = 'candle_collection_progress.json';
 
 const GRANULARITY_TO_INTERVAL = {
@@ -26,7 +28,8 @@ const GRANULARITY_TO_INTERVAL = {
     86400: 1440
 };
 
-let db;
+let tempDb;
+let finalDb;
 
 async function getUSDProducts() {
     try {
@@ -222,30 +225,71 @@ async function collectHistoricalCandles(product, granularity) {
     console.log();
 }
 
+async function transferRecentCandles() {
+    console.log('최근 2000개의 캔들을 candles.db로 전송 중...');
+    for (const interval of CANDLE_INTERVALS) {
+        const sql = `
+            INSERT OR REPLACE INTO candles_${interval} (code, tms, op, hp, lp, cp, tv)
+            SELECT code, tms, op, hp, lp, cp, tv
+            FROM (
+                SELECT * FROM temp_candles.db.candles_${interval}
+                ORDER BY tms DESC
+                LIMIT 2000
+            ) ORDER BY tms ASC
+        `;
+        await new Promise((resolve, reject) => {
+            finalDb.run(sql, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+        console.log(`${interval}분 캔들 전송 완료`);
+    }
+    console.log('모든 캔들 전송이 완료되었습니다.');
+}
+
 async function main() {
     try {
-        db = await connectToDatabase(TEMP_DB_NAME);
-        await createTables(db);
+        tempDb = await connectToDatabase(TEMP_DB_NAME);
+        await createTables(tempDb);
 
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        for (const product of [{id: 'BTC-USD'}]) {
+        for (const product of products) {
             for (const granularity of GRANULARITIES) {
                 await collectHistoricalCandles(product, granularity);
             }
         }
 
         console.log('모든 과거 캔들 데이터 수집이 완료되었습니다.');
+
+        console.log('캔들 집계 시작...');
+        await aggregateHistoricalCandles(tempDb);
+        console.log('캔들 집계 완료');
+
+        finalDb = await connectToDatabase(FINAL_DB_NAME);
+        await createTables(finalDb);
+        await transferRecentCandles();
+
     } catch (error) {
         console.error('오류 발생:', error);
     } finally {
-        if (db) {
-            db.close((err) => {
+        if (tempDb) {
+            tempDb.close((err) => {
                 if (err) {
-                    console.error('데이터베이스 연결 종료 중 오류 발생:', err.message);
+                    console.error('임시 데이터베이스 연결 종료 중 오류 발생:', err.message);
                 } else {
-                    console.log('데이터베이스 연결이 종료되었습니다.');
+                    console.log('임시 데이터베이스 연결이 종료되었습니다.');
+                }
+            });
+        }
+        if (finalDb) {
+            finalDb.close((err) => {
+                if (err) {
+                    console.error('최종 데이터베이스 연결 종료 중 오류 발생:', err.message);
+                } else {
+                    console.log('최종 데이터베이스 연결이 종료되었습니다.');
                 }
             });
         }
