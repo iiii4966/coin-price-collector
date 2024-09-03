@@ -75,11 +75,7 @@ async function aggregateCandles(interval) {
             WHERE tms >= ? AND tms < ?
         `;
 
-        const formatTime = (timestamp) => {
-            const date = new Date(timestamp * 1000);
-            return date.toISOString().replace('T', ' ').substr(0, 19) + ' UTC';
-        };
-        console.log(`${interval}분 캔들 집계 중: ${formatTime(startTime)}부터 ${formatTime(currentTime)}까지`);
+        console.log(`${interval}분 캔들 집계 중:`, new Date(startTime * 1000), '~', new Date(currentTime * 1000));
 
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
@@ -151,7 +147,7 @@ async function saveAggregatedCandles(interval, candles) {
 }
 
 async function updateCandles() {
-    for (const interval of CANDLE_INTERVALS) {
+    for (const interval of CANDLE_INTERVALS.slice(1)) {
         try {
             const aggregatedCandles = await aggregateCandles(interval);
             await saveAggregatedCandles(interval, aggregatedCandles);
@@ -167,6 +163,8 @@ async function updateCandles() {
         await deleteOldCandles();
         deleteTimer = 0;
     }
+
+    console.log()
 }
 
 async function main() {
