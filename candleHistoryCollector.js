@@ -82,12 +82,13 @@ async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
     let end = null;
     let emptyResponseCount = 0;
+    let sameStartEndCount = 0;
 
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
 
-        const start = candles[0][0];
-        end = candles[candles.length - 1][0];
+        const start = candles[0]?.[0];
+        end = candles[candles.length - 1]?.[0];
 
         console.log(
             `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회:`,
@@ -111,12 +112,24 @@ async function collectHistoricalCandles(product, granularity) {
         emptyResponseCount = 0;
 
         if (start === end) {
+            sameStartEndCount++;
             console.log(
-                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
+                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: start와 end가 같음 (${sameStartEndCount}번째)`,
                 new Date(start * 1000), '~', new Date(end * 1000)
             );
-            break;
+
+            if (sameStartEndCount > EMPTY_RESPONSE_RETRY_COUNT) {
+                console.log(
+                    `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
+                    new Date(start * 1000), '~', new Date(end * 1000)
+                );
+                break;
+            }
+            end = end - (granularity * CANDLES_PER_REQUEST);
+            continue;
         }
+
+        sameStartEndCount = 0;
 
         await saveCandles(product.id, candles, granularity);
         collectedCandles += candles.length;
