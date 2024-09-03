@@ -79,7 +79,7 @@ async function aggregateCandles(interval) {
             const date = new Date(timestamp * 1000);
             return date.toISOString().replace('T', ' ').substr(0, 19) + ' UTC';
         };
-        console.log(`Aggregating ${interval}-minute candles from ${formatTime(startTime)} to ${formatTime(currentTime)}`);
+        console.log(`${interval}분 캔들 집계 중: ${formatTime(startTime)}부터 ${formatTime(currentTime)}까지`);
 
         db.all(sql, [startTime, currentTime], (err, rows) => {
             if (err) {
