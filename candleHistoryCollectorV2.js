@@ -24,6 +24,8 @@ let completedProducts = 0;
 let completedGranularities = 0;
 let totalCandlesCollected = 0;
 let totalCandlesToCollect = 0;
+let startTime;
+let elapsedTime = 0;
 
 const GRANULARITY_TO_INTERVAL = {
     60: 1,
@@ -127,6 +129,7 @@ function saveProgress(productId, granularity, lastTimestamp) {
         progress[productId] = {};
     }
     progress[productId][granularity] = lastTimestamp;
+    progress.elapsedTime = elapsedTime;
     fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
 }
 
@@ -135,12 +138,22 @@ async function loadProgress(productId, granularity) {
         const data = fs.readFileSync(PROGRESS_FILE, 'utf8');
         const progress = JSON.parse(data);
         const storedCount = await getStoredCandleCount(productId, granularity);
+        elapsedTime = progress.elapsedTime || 0;
         return {
             lastTimestamp: progress[productId]?.[granularity],
             storedCount
         };
     }
     return { storedCount: 0 };
+}
+
+function formatElapsedTime(milliseconds) {
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    return `${days}일 ${hours % 24}시간 ${minutes % 60}분 ${seconds % 60}초`;
 }
 
 async function collectHistoricalCandles(product, granularity) {
@@ -306,6 +319,7 @@ async function transferRecentCandles() {
 
 async function main() {
     try {
+        startTime = Date.now();
         tempDb = await connectToDatabase(TEMP_DB_NAME);
         await createTables(tempDb);
 
@@ -343,6 +357,9 @@ async function main() {
         } catch (err) {
             console.error('candle_collection_progress.json 파일 삭제 중 오류 발생:', err);
         }
+
+        const totalElapsedTime = Date.now() - startTime + elapsedTime;
+        console.log(`전체 실행 시간: ${formatElapsedTime(totalElapsedTime)}`);
     } catch (error) {
         console.error('오류 발생:', error);
     } finally {
@@ -372,8 +389,10 @@ function updateProgress() {
     const completedTasks = (completedProducts * GRANULARITIES.length) + completedGranularities;
     const progressPercentage = (completedTasks / totalTasks) * 100;
     const candleProgressPercentage = (totalCandlesCollected / totalCandlesToCollect) * 100;
+    elapsedTime = Date.now() - startTime + elapsedTime;
     console.log(`진행 상황: ${progressPercentage.toFixed(2)}% (${completedProducts}/${totalProducts} 상품, ${completedGranularities}/${GRANULARITIES.length} 캔들)`);
     console.log(`캔들 수집 진행 상황: ${candleProgressPercentage.toFixed(2)}% (${totalCandlesCollected}/${totalCandlesToCollect} 캔들)`);
+    console.log(`실행 시간: ${formatElapsedTime(elapsedTime)}`);
 }
 
 main();
