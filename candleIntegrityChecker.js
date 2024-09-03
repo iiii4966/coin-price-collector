@@ -18,18 +18,16 @@ const INTERVAL_TO_GRANULARITY = {
 
 let db;
 
-async function fetchCoinbaseCandles(interval) {
+async function fetchCoinbaseCandles(interval, startTime, endTime) {
     const granularity = INTERVAL_TO_GRANULARITY[interval];
     if (!granularity) {
         return [];
     }
-    const end = Math.floor(Date.now() / 1000);
-    const start = end - (granularity * CANDLES_TO_CHECK);
     const url = `${BASE_URL}/products/${PRODUCT_ID}/candles`;
     const params = {
         granularity,
-        start: start.toString(),
-        end: end.toString()
+        start: startTime.toString(),
+        end: endTime.toString()
     };
 
     try {
@@ -52,7 +50,7 @@ function getLocalCandles(interval) {
             if (err) {
                 reject(err);
             } else {
-                resolve(rows);
+                resolve(rows.reverse()); // 시간 순서대로 정렬
             }
         });
     });
@@ -86,7 +84,16 @@ async function checkCandleIntegrity(interval) {
     console.log(`${interval}분 캔들 데이터 무결성 검사 시작...`);
 
     const localCandles = await getLocalCandles(interval);
-    const coinbaseCandles = await fetchCoinbaseCandles(interval);
+    
+    if (localCandles.length === 0) {
+        console.log(`로컬 ${interval}분 캔들: 존재하지 않습니다.`);
+        return;
+    }
+
+    const startTime = localCandles[0].tms;
+    const endTime = localCandles[localCandles.length - 1].tms;
+    
+    const coinbaseCandles = await fetchCoinbaseCandles(interval, startTime, endTime);
 
     if (coinbaseCandles.length === 0) {
         console.log(`코인베이스 ${interval}분 캔들: 존재하지 않습니다.`);
