@@ -80,20 +80,27 @@ async function saveCandles(productId, candles, granularity) {
 async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
     let end = null;
+    let emptyResponseCount = 0;
 
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
 
         if (candles.length === 0) {
-            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: ${collectedCandles}개`);
-            break;
+            emptyResponseCount++;
+            if (emptyResponseCount >= 3) {
+                console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
+                break;
+            }
+            end = end - (granularity * CANDLES_PER_REQUEST);
+            continue;
         }
 
+        emptyResponseCount = 0;
         const start = candles[0][0];
         end = candles[candles.length - 1][0];
 
         if (start === end) {
-            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: ${collectedCandles}개`);
+            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
             break;
         }
 
@@ -108,6 +115,8 @@ async function collectHistoricalCandles(product, granularity) {
         // API 요청 제한 준수
         await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
     }
+
+    console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 최종 완료: 총 ${collectedCandles}개`);
 }
 
 async function main() {
