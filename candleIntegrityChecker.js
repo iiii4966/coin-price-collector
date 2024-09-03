@@ -84,7 +84,7 @@ async function checkCandleIntegrity(interval) {
     console.log(`${interval}분 캔들 데이터 무결성 검사 시작...`);
 
     const localCandles = await getLocalCandles(interval);
-    
+
     if (localCandles.length === 0) {
         console.log(`로컬 ${interval}분 캔들: 존재하지 않습니다.`);
         return;
@@ -92,7 +92,7 @@ async function checkCandleIntegrity(interval) {
 
     const startTime = localCandles[0].tms;
     const endTime = localCandles[localCandles.length - 1].tms;
-    
+
     const coinbaseCandles = await fetchCoinbaseCandles(interval, startTime, endTime);
 
     if (coinbaseCandles.length === 0) {
