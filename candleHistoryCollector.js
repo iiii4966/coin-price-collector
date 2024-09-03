@@ -132,7 +132,7 @@ async function main() {
         //         await collectHistoricalCandles(product, granularity);
         //     }
         // }
-        for (const granularity of GRANULARITIES.slice(1, 2)) {
+        for (const granularity of GRANULARITIES.slice(0, 1)) {
             await collectHistoricalCandles({id: 'PAX-USD'}, granularity);
         }
 
