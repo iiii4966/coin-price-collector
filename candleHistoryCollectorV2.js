@@ -104,13 +104,25 @@ async function getStoredCandleCount(productId, granularity) {
     });
 }
 
-async function loadProgress() {
+function saveProgress(productId, granularity, lastTimestamp) {
+    let progress = {};
+    if (fs.existsSync(PROGRESS_FILE)) {
+        progress = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'));
+    }
+    if (!progress[productId]) {
+        progress[productId] = {};
+    }
+    progress[productId][granularity] = lastTimestamp;
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+}
+
+async function loadProgress(productId, granularity) {
     if (fs.existsSync(PROGRESS_FILE)) {
         const data = fs.readFileSync(PROGRESS_FILE, 'utf8');
         const progress = JSON.parse(data);
-        const storedCount = await getStoredCandleCount();
+        const storedCount = await getStoredCandleCount(productId, granularity);
         return {
-            ...progress,
+            lastTimestamp: progress[productId]?.[granularity],
             storedCount
         };
     }
