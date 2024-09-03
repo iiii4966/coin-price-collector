@@ -1,0 +1,8 @@
+.aider*
+node_modules
+bin
+include
+lib
+logs
+candle_collection_progress.json
+.idea

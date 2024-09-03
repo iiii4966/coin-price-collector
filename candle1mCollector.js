@@ -21,6 +21,7 @@ async function getCoinbaseProducts() {
 
         console.log(`Number of filtered products: ${filteredProducts.length}`);
         return filteredProducts.map(product => product.id);
+        // return ['BTC-USD'];
     } catch (error) {
         console.error('Error occurred during API request:', error.message);
         return [];
@@ -100,7 +101,8 @@ function updateCandle(trade) {
         };
     }
 
-    if (!candles[code].current || candles[code].current.timestamp !== candleStartTime) {
+    if (!candles[code].current || candles[code].current.tms !== candleStartTime) {
+
         if (candles[code].current) {
             candles[code].previous = candles[code].current;
             candles[code].previous.inserted = false;
@@ -125,7 +127,7 @@ function updateCandle(trade) {
 
 function bulkSaveCandles(candles) {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT OR REPLACE INTO candles (code, tms, op, hp, lp, cp, tv) 
+        const sql = `INSERT OR REPLACE INTO candles_1 (code, tms, op, hp, lp, cp, tv) 
                      VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
         db.serialize(() => {

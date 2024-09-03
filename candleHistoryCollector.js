@@ -6,7 +6,8 @@ const GRANULARITIES = [60, 300, 900, 3600, 86400]; // 1분, 5분, 15분, 1시간
 const MAX_CANDLES = 2000;
 const CANDLES_PER_REQUEST = 300;
 const REQUESTS_PER_SECOND = 10;
-const EMPTY_RESPONSE_RETRY_COUNT = 3;
+const EMPTY_RESPONSE_RETRY_COUNT = 5;
+const EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT = 5;
 
 const GRANULARITY_TO_INTERVAL = {
     60: 1,
@@ -81,27 +82,30 @@ async function saveCandles(productId, candles, granularity) {
 async function collectHistoricalCandles(product, granularity) {
     let collectedCandles = 0;
     let end = null;
+
     let emptyResponseCount = 0;
+    let emptyResponseRetryMax = granularity === 86400 ? 2 : EMPTY_RESPONSE_RETRY_COUNT;
+
     let sameStartEndCount = 0;
 
     while (collectedCandles < MAX_CANDLES) {
         const candles = await fetchCandles(product.id, granularity, end);
 
-        const start = candles[0]?.[0];
-        end = candles[candles.length - 1]?.[0];
-
         console.log(
             `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 조회:`,
-            `${candles.length}개`, new Date(start * 1000), '~', new Date(end * 1000),
+            `${candles.length}개`,
         );
 
         if (candles.length === 0) {
             emptyResponseCount++;
             const startTime = new Date((end - granularity * CANDLES_PER_REQUEST) * 1000);
             const endTime = new Date(end * 1000);
-            console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째), 시간 범위: ${startTime} ~ ${endTime}`);
+            console.log(
+                `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들: 빈 응답 (${emptyResponseCount}번째)`,
+                '시간 범위:', startTime, '~', endTime
+            );
 
-            if (emptyResponseCount > EMPTY_RESPONSE_RETRY_COUNT) {
+            if (emptyResponseCount > emptyResponseRetryMax) {
                 console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 완료: 총 ${collectedCandles}개`);
                 break;
             }
@@ -110,6 +114,8 @@ async function collectHistoricalCandles(product, granularity) {
         }
 
         emptyResponseCount = 0;
+        const start = candles[0][0];
+        end = candles[candles.length - 1][0];
 
         if (start === end) {
             sameStartEndCount++;
@@ -118,7 +124,7 @@ async function collectHistoricalCandles(product, granularity) {
                 new Date(start * 1000), '~', new Date(end * 1000)
             );
 
-            if (sameStartEndCount > EMPTY_RESPONSE_RETRY_COUNT) {
+            if (sameStartEndCount > EMPTY_SAME_START_END_RESPONSE_RETRY_COUNT) {
                 console.log(
                     `${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 종료; 총 ${collectedCandles}개`,
                     new Date(start * 1000), '~', new Date(end * 1000)
@@ -144,6 +150,7 @@ async function collectHistoricalCandles(product, granularity) {
     }
 
     console.log(`${product.id} - ${GRANULARITY_TO_INTERVAL[granularity]}분 캔들 수집 최종 완료: 총 ${collectedCandles}개`);
+    console.log()
 }
 
 async function main() {
@@ -154,14 +161,14 @@ async function main() {
         const products = await getUSDProducts();
         console.log(`총 ${products.length}개의 USD 상품을 찾았습니다.`);
 
-        // for (const product of products) {
-        //     for (const granularity of GRANULARITIES) {
-        //         await collectHistoricalCandles(product, granularity);
-        //     }
-        // }
-        for (const granularity of GRANULARITIES.slice(0, 1)) {
-            await collectHistoricalCandles({id: 'PAX-USD'}, granularity);
+        for (const product of products) {
+            for (const granularity of GRANULARITIES) {
+                await collectHistoricalCandles(product, granularity);
+            }
         }
+        // for (const granularity of GRANULARITIES.slice(0, 1)) {
+        //     await collectHistoricalCandles({id: 'BTC-USD'}, granularity);
+        // }
 
         console.log('모든 과거 캔들 데이터 수집이 완료되었습니다.');
     } catch (error) {
