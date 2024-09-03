@@ -1,6 +1,7 @@
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const { connectToDatabase, CANDLE_INTERVALS } = require('./dbUtils');
+const fs = require('fs');
 
 const BASE_URL = 'https://api.exchange.coinbase.com';
 const PRODUCT_ID = 'BTC-USD';
@@ -56,6 +57,14 @@ function getLocalCandles(interval) {
     });
 }
 
+function writeDifferenceToFile(localCandle, coinbaseCandle, interval) {
+    const content = `Interval: ${interval}분\n` +
+                    `localCandle: { tms: ${localCandle.tms}, op: ${localCandle.op}, cp: ${localCandle.cp}, hp: ${localCandle.hp}, lp: ${localCandle.lp}, tv: ${localCandle.tv} }\n` +
+                    `coinbaseCandle: { tms: ${coinbaseCandle[0]}, op: ${coinbaseCandle[3]}, cp: ${coinbaseCandle[4]}, hp: ${coinbaseCandle[2]}, lp: ${coinbaseCandle[1]}, tv: ${coinbaseCandle[5]} }\n\n`;
+
+    fs.appendFileSync('candle_differences.txt', content);
+}
+
 function compareCandles(localCandles, coinbaseCandles, interval) {
     let differences = 0;
     const coinbaseMap = new Map(coinbaseCandles.map(candle => [candle[0], candle]));
@@ -71,9 +80,11 @@ function compareCandles(localCandles, coinbaseCandles, interval) {
                 localCandle.tv !== coinbaseCandle[5]
             ) {
                 differences++;
+                writeDifferenceToFile(localCandle, coinbaseCandle, interval);
             }
         } else {
             differences++;
+            writeDifferenceToFile(localCandle, [localCandle.tms, null, null, null, null, null], interval);
         }
     }
 
