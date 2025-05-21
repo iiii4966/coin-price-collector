@@ -1,4 +1,4 @@
-# Coinbase Candle Collector and Aggregator
+# Coinbase Candle Collector and Aggregator by Jules AI
 
 ## Project Overview
 
